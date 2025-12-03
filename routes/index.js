@@ -102,6 +102,45 @@ router.post("/register", registerUser);
 router.post("/auth/google", googleAuth);
 router.get("/forgot-password", redirectIfAuthenticated, forgotPasswordPage);
 
+// Google OAuth Routes
+import passport from "../config/passport.js";
+
+// Check if Google OAuth is configured
+const isGoogleConfigured = process.env.GOOGLE_CLIENT_ID && 
+                            process.env.GOOGLE_CLIENT_ID !== 'your-google-client-id.apps.googleusercontent.com';
+
+if (isGoogleConfigured) {
+    router.get("/auth/google", 
+        passport.authenticate('google', { 
+            scope: ['profile', 'email'] 
+        })
+    );
+
+    router.get("/auth/google/callback",
+        passport.authenticate('google', { failureRedirect: '/login' }),
+        (req, res) => {
+            // Successful authentication
+            req.session.userId = req.user.id;
+            req.session.userName = req.user.name;
+            req.session.userEmail = req.user.email;
+            req.session.userRole = req.user.role;
+            req.session.isApproved = req.user.isApproved;
+            
+            console.log('✅ Google OAuth login successful:', req.user.email);
+            res.redirect('/dashboard');
+        }
+    );
+} else {
+    // Fallback routes when Google OAuth is not configured
+    router.get("/auth/google", (req, res) => {
+        res.redirect('/login?error=google_not_configured');
+    });
+    
+    router.get("/auth/google/callback", (req, res) => {
+        res.redirect('/login?error=google_not_configured');
+    });
+}
+
 // Staff Landing Pages - Separate from main pages
 router.get("/staff", (req, res) => {
     if (req.session.userId && req.session.userRole === 'staff') {
@@ -216,6 +255,84 @@ router.get("/api/insurance/:id", requireAuth, async (req, res) => {
     } catch (error) {
         console.error('Error getting insurance:', error);
         res.status(500).json({ success: false, error: 'Failed to load insurance application' });
+    }
+});
+
+// Staff routes for insurance approval
+router.post("/api/staff/insurance/:id/approve", requireRole(['staff', 'admin']), async (req, res) => {
+    try {
+        const { Insurance } = await import("../models/InsuranceMySQL.js");
+        const { approvalNotes } = req.body;
+        
+        await Insurance.update(req.params.id, {
+            status: 'approved',
+            approvalNotes: approvalNotes || 'Approved by staff',
+            approvedBy: req.session.userId,
+            approvedAt: new Date()
+        });
+        
+        res.json({ success: true, message: 'Insurance application approved successfully' });
+    } catch (error) {
+        console.error('Error approving insurance:', error);
+        res.status(500).json({ success: false, error: 'Failed to approve insurance application' });
+    }
+});
+
+router.post("/api/staff/insurance/:id/reject", requireRole(['staff', 'admin']), async (req, res) => {
+    try {
+        const { Insurance } = await import("../models/InsuranceMySQL.js");
+        const { approvalNotes } = req.body;
+        
+        await Insurance.update(req.params.id, {
+            status: 'rejected',
+            approvalNotes: approvalNotes || 'Rejected by staff',
+            approvedBy: req.session.userId,
+            approvedAt: new Date()
+        });
+        
+        res.json({ success: true, message: 'Insurance application rejected' });
+    } catch (error) {
+        console.error('Error rejecting insurance:', error);
+        res.status(500).json({ success: false, error: 'Failed to reject insurance application' });
+    }
+});
+
+// Staff routes for damage report verification
+router.post("/api/staff/damage-reports/:id/verify", requireRole(['staff', 'admin']), async (req, res) => {
+    try {
+        const { DamageReport } = await import("../models/DamageReportMySQL.js");
+        const { verificationNotes } = req.body;
+        
+        await DamageReport.update(req.params.id, {
+            status: 'verified',
+            verificationNotes: verificationNotes || 'Verified by staff',
+            verifiedBy: req.session.userId,
+            verifiedAt: new Date()
+        });
+        
+        res.json({ success: true, message: 'Damage report verified successfully' });
+    } catch (error) {
+        console.error('Error verifying damage report:', error);
+        res.status(500).json({ success: false, error: 'Failed to verify damage report' });
+    }
+});
+
+router.post("/api/staff/damage-reports/:id/reject", requireRole(['staff', 'admin']), async (req, res) => {
+    try {
+        const { DamageReport } = await import("../models/DamageReportMySQL.js");
+        const { verificationNotes } = req.body;
+        
+        await DamageReport.update(req.params.id, {
+            status: 'rejected',
+            verificationNotes: verificationNotes || 'Rejected by staff',
+            verifiedBy: req.session.userId,
+            verifiedAt: new Date()
+        });
+        
+        res.json({ success: true, message: 'Damage report rejected' });
+    } catch (error) {
+        console.error('Error rejecting damage report:', error);
+        res.status(500).json({ success: false, error: 'Failed to reject damage report' });
     }
 });
 

@@ -169,14 +169,6 @@ document.addEventListener('DOMContentLoaded', function() {
     if (document.getElementById('benefits-table')) {
         console.log('🎁 Claims: Loading benefits...');
         loadBenefits();
-        
-        // Auto-refresh every 5 seconds
-        setInterval(() => {
-            if (document.getElementById('claims-section')?.style.display !== 'none') {
-                console.log('🔄 Auto-refreshing benefits (5s interval)...');
-                loadBenefits();
-            }
-        }, 5000);
     }
     
     // Setup modal event listener to load farmers when modal opens

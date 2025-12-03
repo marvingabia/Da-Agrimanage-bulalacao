@@ -68,6 +68,32 @@ export class Insurance {
             throw error;
         }
     }
+
+    static async update(id, data) {
+        const pool = getPool();
+        try {
+            const fields = [];
+            const values = [];
+            
+            // Build dynamic update query
+            Object.keys(data).forEach(key => {
+                fields.push(`${key} = ?`);
+                values.push(data[key]);
+            });
+            
+            values.push(id);
+            
+            await pool.query(
+                `UPDATE insurance SET ${fields.join(', ')} WHERE id = ?`,
+                values
+            );
+            
+            return await Insurance.findById(id);
+        } catch (error) {
+            console.error('Error updating insurance:', error);
+            throw error;
+        }
+    }
 }
 
 export default Insurance;

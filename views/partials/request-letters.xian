@@ -705,7 +705,7 @@ function submitResponse(event) {
     
     // Show success popup after modal is closed
     setTimeout(() => {
-        showSuccessPopup('Response Sent!', 'Your response has been sent to the farmer successfully.');
+        showRequestSuccessPopup('Response Sent!', 'Your response has been sent to the farmer successfully.');
     }, 200);
     
     // Send to server in background

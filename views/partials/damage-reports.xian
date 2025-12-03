@@ -218,32 +218,10 @@
 </div>
 
 <script>
-// Auto-refresh interval for real-time updates
-let damageReportsRefreshInterval = null;
-
 // Load damage reports on page load
 document.addEventListener('DOMContentLoaded', function() {
     if (document.getElementById('damage-reports-table')) {
         loadDamageReports();
-        
-        // Auto-refresh every 5 seconds for staff/admin to see new submissions
-        const userRole = '{{user.role}}';
-        if (userRole === 'staff' || userRole === 'admin') {
-            damageReportsRefreshInterval = setInterval(() => {
-                // Only refresh if damage reports section is visible
-                if (document.getElementById('damage-reports-section')?.style.display !== 'none') {
-                    console.log('🔄 Auto-refreshing damage reports (5s interval)...');
-                    loadDamageReports();
-                }
-            }, 5000); // Refresh every 5 seconds
-        }
-    }
-});
-
-// Clear interval when leaving the section
-window.addEventListener('beforeunload', function() {
-    if (damageReportsRefreshInterval) {
-        clearInterval(damageReportsRefreshInterval);
     }
 });
 
@@ -287,6 +265,16 @@ function loadDamageReports() {
                             <button class="premium-btn premium-btn-info" style="padding: 0.5rem 1rem;" onclick="viewDamageReport('${report.id}')" title="View Details">
                                 <i class="fas fa-eye me-1"></i>View
                             </button>
+                            {{#if (eq user.role 'staff')}}
+                            ${report.status === 'pending' ? `
+                                <button class="premium-btn premium-btn-success" style="padding: 0.5rem 1rem; margin-left: 0.5rem;" onclick="verifyDamageReport('${report.id}')" title="Verify Report">
+                                    <i class="fas fa-check me-1"></i>Verify
+                                </button>
+                                <button class="premium-btn premium-btn-danger" style="padding: 0.5rem 1rem; margin-left: 0.5rem;" onclick="rejectDamageReport('${report.id}')" title="Reject Report">
+                                    <i class="fas fa-times me-1"></i>Reject
+                                </button>
+                            ` : ''}
+                            {{/if}}
                         </td>
                     </tr>
                 `}).join('');
@@ -438,6 +426,64 @@ function viewDamageReport(reportId) {
             console.error('Error:', error);
             showErrorPopup('Error', 'Error loading damage report details');
         });
+}
+
+function verifyDamageReport(reportId) {
+    if (!confirm('Are you sure you want to verify this damage report?')) {
+        return;
+    }
+    
+    const notes = prompt('Enter verification notes (optional):');
+    
+    fetch(`/api/staff/damage-reports/${reportId}/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            verificationNotes: notes || 'Verified by staff'
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showDamageSuccessPopup('Verified!', 'Damage report has been verified successfully.');
+            loadDamageReports(); // Reload list
+        } else {
+            showErrorPopup('Error', data.message || 'Failed to verify damage report');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showErrorPopup('Error', 'Error verifying damage report');
+    });
+}
+
+function rejectDamageReport(reportId) {
+    const reason = prompt('Enter reason for rejection:');
+    if (!reason) {
+        alert('Rejection reason is required');
+        return;
+    }
+    
+    fetch(`/api/staff/damage-reports/${reportId}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            verificationNotes: reason
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showDamageSuccessPopup('Rejected', 'Damage report has been rejected.');
+            loadDamageReports(); // Reload list
+        } else {
+            showErrorPopup('Error', data.message || 'Failed to reject damage report');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showErrorPopup('Error', 'Error rejecting damage report');
+    });
 }
 
 // Success and Error Popup Functions

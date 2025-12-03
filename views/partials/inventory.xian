@@ -246,18 +246,6 @@ if (!window.inventoryInitialized) {
             if (typeof window.loadInventory === 'function') {
                 window.loadInventory();
             }
-            
-            // Auto-refresh every 5 seconds (same as claims)
-            if (!window.inventoryRefreshInterval) {
-                window.inventoryRefreshInterval = setInterval(() => {
-                    if (document.getElementById('inventory-section')?.style.display !== 'none') {
-                        console.log('🔄 Auto-refreshing inventory (5s interval)...');
-                        if (typeof window.loadInventory === 'function') {
-                            window.loadInventory();
-                        }
-                    }
-                }, 5000);
-            }
         } else {
             console.log('⚠️ Inventory table not found yet');
         }

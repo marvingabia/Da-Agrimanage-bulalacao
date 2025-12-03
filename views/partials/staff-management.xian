@@ -321,15 +321,6 @@ function showNotification(type, message) {
 document.addEventListener('DOMContentLoaded', function() {
     loadPendingStaff();
     loadApprovedStaff();
-    
-    // Auto-refresh every 5 seconds for real-time updates
-    setInterval(() => {
-        if (document.getElementById('staff-management-section').style.display !== 'none') {
-            console.log('🔄 Auto-refreshing staff lists (5s interval)...');
-            loadPendingStaff();
-            loadApprovedStaff();
-        }
-    }, 5000); // 5 seconds
 });
 
 function loadPendingStaff() {

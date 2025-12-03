@@ -32,6 +32,8 @@ import hbs from "hbs";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 import { initDatabase } from "./config/database.js";
+import passport from "./config/passport.js";
+import { configurePassport } from "./config/passport.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -67,6 +69,11 @@ app.use(session({
   // For Vercel, we need to trust the proxy
   proxy: process.env.NODE_ENV === 'production'
 }));
+
+// Initialize Passport for Google OAuth
+configurePassport();
+app.use(passport.initialize());
+app.use(passport.session());
 
 // Trust proxy for Vercel
 if (process.env.NODE_ENV === 'production') {

@@ -679,17 +679,18 @@
                 </button>
             </form>
             
-            <div class="divider">
-                <span>OR CONTINUE WITH</span>
-            </div>
-            
-            <!-- Google OAuth Disabled - Use email/password login -->
-            <!-- To enable: Configure Google OAuth in GOOGLE_OAUTH_SETUP.md -->
-            <div class="google-signin-container" style="display: none;">
-                <button class="btn google-btn" onclick="alert('Google OAuth not configured. Please use email/password login.')" id="customGoogleBtn">
-                    <i class="fab fa-google" style="color: #4285f4;"></i>
-                    Continue with Google
-                </button>
+            <!-- Google OAuth Sign-In (Hidden until configured) -->
+            <div id="googleOAuthSection" style="display: none;">
+                <div class="divider">
+                    <span>OR CONTINUE WITH</span>
+                </div>
+                
+                <div class="google-signin-container">
+                    <a href="/auth/google" class="btn google-btn" id="customGoogleBtn">
+                        <i class="fab fa-google" style="color: #4285f4;"></i>
+                        Continue with Google
+                    </a>
+                </div>
             </div>
             
             <div class="register-link">

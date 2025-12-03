@@ -238,25 +238,10 @@
 </div>
 
 <script>
-// Auto-refresh interval for real-time updates
-let insuranceRefreshInterval = null;
-
 // Load insurance applications on page load
 document.addEventListener('DOMContentLoaded', function() {
     if (document.getElementById('insurance-table')) {
         loadInsurance();
-        
-        // Auto-refresh every 5 seconds for staff/admin to see new submissions
-        const userRole = '{{user.role}}';
-        if (userRole === 'staff' || userRole === 'admin') {
-            insuranceRefreshInterval = setInterval(() => {
-                // Only refresh if insurance section is visible
-                if (document.getElementById('insurance-section')?.style.display !== 'none') {
-                    console.log('🔄 Auto-refreshing insurance applications (5s interval)...');
-                    loadInsurance();
-                }
-            }, 5000); // Refresh every 5 seconds
-        }
     }
     
     // Premium and coverage are now manual input fields
@@ -303,6 +288,16 @@ function loadInsurance() {
                             <button class="premium-btn premium-btn-info" style="padding: 0.5rem 1rem;" onclick="viewInsurance('${ins.id}')" title="View Details">
                                 <i class="fas fa-eye me-1"></i>View
                             </button>
+                            {{#if (eq user.role 'staff')}}
+                            ${ins.status === 'pending' ? `
+                                <button class="premium-btn premium-btn-success" style="padding: 0.5rem 1rem; margin-left: 0.5rem;" onclick="approveInsurance('${ins.id}')" title="Approve Application">
+                                    <i class="fas fa-check me-1"></i>Approve
+                                </button>
+                                <button class="premium-btn premium-btn-danger" style="padding: 0.5rem 1rem; margin-left: 0.5rem;" onclick="rejectInsurance('${ins.id}')" title="Reject Application">
+                                    <i class="fas fa-times me-1"></i>Reject
+                                </button>
+                            ` : ''}
+                            {{/if}}
                         </td>
                     </tr>
                 `}).join('');
@@ -462,6 +457,64 @@ function viewInsurance(insuranceId) {
             console.error('Error:', error);
             showErrorPopup('Error', 'Error loading insurance details');
         });
+}
+
+function approveInsurance(insuranceId) {
+    if (!confirm('Are you sure you want to approve this insurance application?')) {
+        return;
+    }
+    
+    const notes = prompt('Enter approval notes (optional):');
+    
+    fetch(`/api/staff/insurance/${insuranceId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            approvalNotes: notes || 'Approved by staff'
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showSuccessPopup('Approved!', 'Insurance application has been approved successfully.');
+            loadInsurance(); // Reload list
+        } else {
+            showErrorPopup('Error', data.message || 'Failed to approve insurance');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showErrorPopup('Error', 'Error approving insurance application');
+    });
+}
+
+function rejectInsurance(insuranceId) {
+    const reason = prompt('Enter reason for rejection:');
+    if (!reason) {
+        alert('Rejection reason is required');
+        return;
+    }
+    
+    fetch(`/api/staff/insurance/${insuranceId}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            approvalNotes: reason
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showSuccessPopup('Rejected', 'Insurance application has been rejected.');
+            loadInsurance(); // Reload list
+        } else {
+            showErrorPopup('Error', data.message || 'Failed to reject insurance');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showErrorPopup('Error', 'Error rejecting insurance application');
+    });
 }
 
 // Success and Error Popup Functions

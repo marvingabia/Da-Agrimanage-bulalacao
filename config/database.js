@@ -75,12 +75,14 @@ async function createTables() {
                 role ENUM('farmer', 'staff', 'admin') NOT NULL,
                 barangay VARCHAR(255),
                 authProvider ENUM('email', 'google') DEFAULT 'email',
+                googleId VARCHAR(255),
                 isApproved BOOLEAN DEFAULT FALSE,
                 createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 INDEX idx_email (email),
                 INDEX idx_role (role),
-                INDEX idx_barangay (barangay)
+                INDEX idx_barangay (barangay),
+                INDEX idx_googleId (googleId)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         `);
 

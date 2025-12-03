@@ -38,9 +38,17 @@ body {
     width: 280px;
     transition: transform 0.3s ease;
     box-shadow: 4px 0 15px rgba(0,0,0,0.1);
-    overflow-y: auto; /* Enable vertical scrolling */
-    overflow-x: hidden; /* Prevent horizontal scroll */
+    overflow-y: auto !important; /* Enable vertical scrolling */
+    overflow-x: hidden !important; /* Prevent horizontal scroll */
     -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+    height: 100vh !important; /* Full viewport height */
+    max-height: 100vh !important;
+}
+
+/* Ensure sidebar content doesn't prevent scrolling */
+.sidebar > div {
+    min-height: min-content;
+    padding-bottom: 2rem; /* Space at bottom */
 }
 
 /* Scrollbar styling for sidebar - Desktop */
