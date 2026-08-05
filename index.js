@@ -150,28 +150,26 @@ hbs.registerHelper('substring', function(str, start, end) {
   return str.substring(start, end);
 });
 const partialsDir = path.join(__dirname, "views/partials");
-fs.readdir(partialsDir, (err, files) => {
-  if (err) {
-    console.error("❌ Could not read partials directory:", err);
-    return;
-  }
 
-   files
+// Load partials SYNCHRONOUSLY so they are ready before any request hits
+try {
+  const files = fs.readdirSync(partialsDir);
+  files
     .filter(file => file.endsWith('.xian'))
     .forEach(file => {
-      const partialName = file.replace('.xian', ''); 
+      const partialName = file.replace('.xian', '');
       const fullPath = path.join(partialsDir, file);
-
-      fs.readFile(fullPath, 'utf8', (err, content) => {
-        if (err) {
-          console.error(`❌ Failed to read partial: ${file}`, err);
-          return;
-        }
+      try {
+        const content = fs.readFileSync(fullPath, 'utf8');
         hbs.registerPartial(partialName, content);
-        
-      });
+      } catch (err) {
+        console.error(`❌ Failed to read partial: ${file}`, err);
+      }
     });
-});
+  console.log('✅ All partials loaded successfully');
+} catch (err) {
+  console.error("❌ Could not read partials directory:", err);
+}
 
 // Import your route files
 import adminRoutes from './routes/adminRoutes.js'; // Assuming you have this
