@@ -26,12 +26,13 @@
 import express from "express";
 import path from "path";
 import session from "express-session";
+import MySQLStoreFactory from "express-mysql-session";
 import router from "./routes/index.js";
 import fs from 'fs';
 import hbs from "hbs";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
-import { initDatabase } from "./config/database.js";
+import { initDatabase, getPool } from "./config/database.js";
 import passport from "./config/passport.js";
 import { configurePassport } from "./config/passport.js";
 
@@ -47,7 +48,6 @@ try {
     console.log('✅ MySQL database initialized successfully');
 } catch (error) {
     console.log('⚠️  MySQL not available, running in fallback mode');
-    console.log('💡 Start Laragon and run: npm run migrate');
     console.log('📝 System will use local storage for now');
 }
 
@@ -55,19 +55,45 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(path.join(process.cwd(), "public")));
 
-// Session configuration for Vercel serverless
+// ── Sessions ─────────────────────────────────────────────────────────────────
+// Use MySQL-backed sessions when DB is available (works on Vercel + cloud DB)
+// Falls back to in-memory sessions when DB is not available (local dev without DB)
+let sessionStore;
+try {
+    const pool = getPool();
+    if (pool) {
+        const MySQLStore = MySQLStoreFactory(session);
+        sessionStore = new MySQLStore({
+            checkExpirationInterval: 900000,  // 15 minutes
+            expiration: 86400000,             // 24 hours
+            createDatabaseTable: true,
+            schema: {
+                tableName: 'sessions',
+                columnNames: {
+                    session_id: 'session_id',
+                    expires: 'expires',
+                    data: 'data'
+                }
+            }
+        }, pool);
+        console.log('✅ MySQL session store initialized');
+    }
+} catch (e) {
+    console.log('⚠️  Using in-memory sessions (DB not available)');
+}
+
 app.use(session({
-  secret: process.env.SESSION_SECRET || "xianfire-secret-key-change-in-production",
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
-    httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    sameSite: 'lax'
-  },
-  // For Vercel, we need to trust the proxy
-  proxy: process.env.NODE_ENV === 'production'
+    secret: process.env.SESSION_SECRET || 'xianfire-secret-key-change-in-production',
+    resave: false,
+    saveUninitialized: false,
+    store: sessionStore || undefined,   // use MySQL store if available
+    cookie: {
+        secure: process.env.NODE_ENV === 'production',
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000,   // 24 hours
+        sameSite: 'lax'
+    },
+    proxy: process.env.NODE_ENV === 'production'
 }));
 
 // Initialize Passport for Google OAuth
