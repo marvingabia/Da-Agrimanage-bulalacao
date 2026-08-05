@@ -23,10 +23,6 @@ const dbConfig = {
     ...((process.env.DB_SSL === 'true' || (process.env.DB_HOST && process.env.DB_HOST !== 'localhost')) && !isPlanetScale && {
         ssl: { rejectUnauthorized: false }
     }),
-    // PlanetScale specific settings
-    ...(isPlanetScale && {
-        ssl: { rejectUnauthorized: true }
-    })
 };
 
 // Create connection pool
@@ -148,11 +144,28 @@ async function createTables() {
         }
         console.log('✅ Users table columns verified/migrated');
 
-        // Ensure default admin exists
-        await pool.query(`
-            INSERT IGNORE INTO users (id, name, email, password, role, barangay, authProvider, isApproved, createdAt)
-            VALUES ('admin-001', 'System Administrator', 'mj@gmail.com', 'admin2025', 'admin', 'Main Office', 'email', 1, NOW())
-        `);
+        // Ensure default admin exists with bcrypt hashed password
+        const bcrypt = await import('bcrypt');
+        const adminPassword = process.env.ADMIN_PASSWORD || 'admin2025';
+        const hashedPassword = await bcrypt.default.hash(adminPassword, 10);
+        
+        // Check if admin already exists
+        const [existingAdmin] = await pool.query(`SELECT id FROM users WHERE email = 'mj@gmail.com'`);
+        if (existingAdmin.length === 0) {
+            await pool.query(`
+                INSERT INTO users (id, name, email, password, role, barangay, authProvider, isApproved, createdAt)
+                VALUES ('admin-001', 'System Administrator', 'mj@gmail.com', ?, 'admin', 'Main Office', 'email', 1, NOW())
+            `, [hashedPassword]);
+            console.log('✅ Default admin user created');
+        } else {
+            // Update existing admin password to hashed version if it's plain text
+            const [adminUser] = await pool.query(`SELECT password FROM users WHERE email = 'mj@gmail.com'`);
+            const isHashed = adminUser[0]?.password?.startsWith('$2b$') || adminUser[0]?.password?.startsWith('$2a$');
+            if (!isHashed) {
+                await pool.query(`UPDATE users SET password = ? WHERE email = 'mj@gmail.com'`, [hashedPassword]);
+                console.log('✅ Admin password updated to hashed version');
+            }
+        }
 
         // Insurance Table
         await pool.query(`
