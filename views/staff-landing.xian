@@ -337,7 +337,7 @@
                             <i class="fas fa-user-circle"></i>
                             Mag-login
                         </a>
-                        <a href="/staff/register" class="btn btn-hero btn-hero-secondary">
+                        <a href="/register" class="btn btn-hero btn-hero-secondary">
                             <i class="fas fa-user-plus"></i>
                             Magrehistro
                         </a>

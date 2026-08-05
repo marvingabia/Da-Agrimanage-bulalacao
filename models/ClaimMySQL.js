@@ -4,13 +4,19 @@
 
 import { getPool } from '../config/database.js';
 
+function requirePool() {
+    const pool = getPool();
+    if (!pool) throw new Error('MySQL database is not available. Please ensure MySQL/Laragon is running.');
+    return pool;
+}
+
 export class Claim {
     constructor(data) {
         Object.assign(this, data);
     }
 
     async save() {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             if (!this.id) {
                 this.id = `CLM-${Date.now()}`;
@@ -45,7 +51,7 @@ export class Claim {
     }
 
     static async findAll() {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const [rows] = await pool.query('SELECT * FROM claims ORDER BY createdAt DESC');
             return rows.map(row => new Claim(row));
@@ -56,7 +62,7 @@ export class Claim {
     }
 
     static async findById(id) {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const [rows] = await pool.query('SELECT * FROM claims WHERE id = ?', [id]);
             return rows.length > 0 ? new Claim(rows[0]) : null;
@@ -67,7 +73,7 @@ export class Claim {
     }
 
     static async findByFarmer(farmerId) {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const [rows] = await pool.query(
                 'SELECT * FROM claims WHERE farmerId = ? ORDER BY createdAt DESC',
@@ -82,3 +88,5 @@ export class Claim {
 }
 
 export default Claim;
+
+

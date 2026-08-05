@@ -143,7 +143,7 @@
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Contact Number *</label>
-                            <input type="tel" class="form-control" name="contactNumber" placeholder="09xxxxxxxxx" required>
+                            <input type="tel" class="form-control" name="contactNumber" value="{{user.phone}}" placeholder="09xxxxxxxxx" required>
                         </div>
                     </div>
                 </div>

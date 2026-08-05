@@ -1,64 +1,29 @@
 {
   "name": "DA-AgriManage",
   "version": "1.0.0",
-  "main": "electron/main.js",
+  "main": "index.js",
   "type": "module",
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "xian-start": "node index.js",
-    "xian": "nodemon index.js",
-    "migrate": "node migrate-mysql.js",
-    "migrate:custom": "node migrate-mysql.js",
-    "create:model": "node create.js model",
-    "create:controller": "node create.js controller",
-    "xianca": "electron .",
-    "xian-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
-    "xian-build": "electron-builder",
-    "build": "node index.js",
-    "dist": "npm run electron-build -- --publish=never",
     "vercel-build": "echo 'Build completed'"
   },
   "dependencies": {
     "bcrypt": "^5.1.0",
     "connect-flash": "^0.1.1",
+    "dotenv": "^16.0.0",
     "express": "^4.19.2",
     "express-session": "^1.17.3",
     "express-validator": "^7.0.1",
-    "firebase": "^10.12.0",
     "hbs": "^4.2.0",
-    "inquirer": "^9.2.15",
     "moment": "^2.29.4",
-    "multer": "^1.4.5-lts.1",
     "mysql2": "^3.15.3",
     "nodemailer": "^7.0.11",
     "passport": "^0.7.0",
-    "passport-google-oauth20": "^2.0.0"
+    "passport-google-oauth20": "^2.0.0",
+    "uuid": "^9.0.0"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2",
-    "electron": "^28.0.0",
-    "electron-builder": "^24.9.1"
-  },
-  "build": {
-    "appId": "com.xianfire.app",
-    "productName": "DA-AgriManage",
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "**/*",
-      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
-      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
-      "!**/node_modules/*.d.ts",
-      "!**/node_modules/.bin",
-      "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}",
-      "!.editorconfig",
-      "!**/._*",
-      "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}",
-      "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}",
-      "!**/{appveyor.yml,.travis.yml,circle.yml}",
-      "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}"
-    ]
+    "nodemon": "^3.0.0"
   }
 }

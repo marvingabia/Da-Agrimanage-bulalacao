@@ -220,6 +220,16 @@
             {{/if}}
             
             <form action="/register" method="POST" id="registerForm">
+                <!-- Role Selection -->
+                <div class="form-group">
+                    <label for="role" class="form-label">I am registering as</label>
+                    <select class="form-select" id="role" name="role" required onchange="toggleRoleFields()">
+                        <option value="">Select your role</option>
+                        <option value="farmer">Farmer (Magsasaka)</option>
+                        <option value="staff">Staff (Kawani ng Tanggapan)</option>
+                    </select>
+                </div>
+                
                 <div class="form-row">
                     <div class="form-group">
                         <label for="name" class="form-label">Full Name</label>
@@ -311,7 +321,7 @@
                 </div>
                 
                 <!-- Farmer-specific fields -->
-                <div class="farmer-fields" id="farmerFields">
+                <div class="farmer-fields hidden" id="farmerFields">
                     <div class="form-row">
                         <div class="form-group">
                             <label for="landArea" class="form-label">Land Area (hectares)</label>
@@ -341,6 +351,20 @@
                     </div>
                 </div>
                 
+                <!-- Staff-specific fields -->
+                <div class="staff-fields hidden" id="staffFields">
+                    <div class="form-group">
+                        <label for="dob" class="form-label">Date of Birth</label>
+                        <input type="date" class="form-control" id="dob" name="dob" max="">
+                        <small class="form-text text-muted">You must be at least 18 years old</small>
+                    </div>
+                    
+                    <div class="alert" style="background: rgba(59, 130, 246, 0.2); border-color: rgba(59, 130, 246, 0.3); margin-top: 1rem;">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <small><strong>Note:</strong> Your staff account will require admin approval before you can login.</small>
+                    </div>
+                </div>
+                
                 <button type="submit" class="btn register-btn">
                     <i class="fas fa-user-plus me-2"></i>
                     Create Account
@@ -356,10 +380,59 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
+        // Toggle role-specific fields
+        function toggleRoleFields() {
+            const role = document.getElementById('role').value;
+            const farmerFields = document.getElementById('farmerFields');
+            const staffFields = document.getElementById('staffFields');
+            const landArea = document.getElementById('landArea');
+            const landType = document.getElementById('landType');
+            const dob = document.getElementById('dob');
+            
+            // Set max date for DOB (18 years ago)
+            const today = new Date();
+            const maxDate = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
+            dob.max = maxDate.toISOString().split('T')[0];
+            
+            if (role === 'farmer') {
+                farmerFields.classList.remove('hidden');
+                staffFields.classList.add('hidden');
+                landArea.required = true;
+                landType.required = true;
+                dob.required = false;
+            } else if (role === 'staff') {
+                farmerFields.classList.add('hidden');
+                staffFields.classList.remove('hidden');
+                landArea.required = false;
+                landType.required = false;
+                dob.required = true;
+            } else {
+                farmerFields.classList.add('hidden');
+                staffFields.classList.add('hidden');
+                landArea.required = false;
+                landType.required = false;
+                dob.required = false;
+            }
+        }
+        
         // Form submission with loading state
         document.getElementById('registerForm').addEventListener('submit', function(e) {
             const submitBtn = this.querySelector('.register-btn');
             const originalText = submitBtn.innerHTML;
+            const role = document.getElementById('role').value;
+            
+            // Validate role selection
+            if (!role) {
+                e.preventDefault();
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Select Your Role',
+                    text: 'Please select whether you are registering as a Farmer or Staff.',
+                    confirmButtonText: 'OK',
+                    confirmButtonColor: '#f59e0b'
+                });
+                return;
+            }
             
             // Validate password match
             if (passwordInput.value !== confirmPasswordInput.value) {
@@ -377,9 +450,8 @@
                 return;
             }
             
-            // Validate farmer fields if they are visible
-            const farmerFields = document.getElementById('farmerFields');
-            if (!farmerFields.classList.contains('hidden')) {
+            // Validate farmer fields if farmer role selected
+            if (role === 'farmer') {
                 const landArea = document.getElementById('landArea').value;
                 const landType = document.getElementById('landType').value;
                 
@@ -397,6 +469,43 @@
                 }
             }
             
+            // Validate staff fields if staff role selected
+            if (role === 'staff') {
+                const dob = document.getElementById('dob').value;
+                
+                if (!dob) {
+                    e.preventDefault();
+                    
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Incomplete Information',
+                        text: 'Please enter your Date of Birth.',
+                        confirmButtonText: 'OK',
+                        confirmButtonColor: '#f59e0b'
+                    });
+                    return;
+                }
+                
+                // Validate age (must be 18+)
+                const birthDate = new Date(dob);
+                const today = new Date();
+                const age = today.getFullYear() - birthDate.getFullYear();
+                const monthDiff = today.getMonth() - birthDate.getMonth();
+                
+                if (age < 18 || (age === 18 && monthDiff < 0)) {
+                    e.preventDefault();
+                    
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Age Requirement',
+                        text: 'You must be at least 18 years old to register as staff.',
+                        confirmButtonText: 'OK',
+                        confirmButtonColor: '#f59e0b'
+                    });
+                    return;
+                }
+            }
+            
             submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Creating Account...';
             submitBtn.disabled = true;
             
@@ -407,9 +516,9 @@
             }, 5000);
         });
         
-        // Auto-focus name input
+        // Auto-focus role selector
         document.addEventListener('DOMContentLoaded', function() {
-            document.getElementById('name').focus();
+            document.getElementById('role').focus();
         });
         
         // Password validation

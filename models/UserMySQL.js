@@ -6,6 +6,12 @@
 import { getPool } from '../config/database.js';
 import bcrypt from 'bcrypt';
 
+function requirePool() {
+    const pool = getPool();
+    if (!pool) throw new Error('MySQL database is not available. Please ensure MySQL/Laragon is running.');
+    return pool;
+}
+
 export class User {
     constructor(data) {
         this.id = data.id || null;
@@ -19,12 +25,13 @@ export class User {
         this.staffingManagement = data.staffingManagement;
         this.authProvider = data.authProvider || 'email';
         this.isApproved = data.isApproved !== undefined ? data.isApproved : (data.role === 'staff' ? false : true);
+        this.status = data.status || 'active';
         this.createdAt = data.createdAt;
         this.updatedAt = data.updatedAt;
     }
 
     async save() {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             // Check if user already exists
             const [existing] = await pool.query('SELECT id FROM users WHERE id = ?', [this.id]);
@@ -38,20 +45,49 @@ export class User {
                     [this.name, this.email, this.role, this.barangay, this.phone, this.dob, this.staffingManagement, this.isApproved, this.id]
                 );
             } else {
-                // Create new user - use provided ID or generate one
                 if (!this.id) {
                     this.id = `USER-${Date.now()}`;
                 }
                 
                 console.log(`✨ Creating new user in MySQL: ${this.id} (${this.email})`);
                 
-                // Don't hash password if it's already hashed or if using Google auth
-                const passwordToSave = this.password;
-                
+                // ── Safe migration: add missing columns only if they don't exist ──
+                // Works on MySQL 5.7 and 8.x (no IF NOT EXISTS for ALTER TABLE)
+                const missingColumns = [
+                    { name: 'status',           def: "VARCHAR(50) DEFAULT 'active'" },
+                    { name: 'suspensionStart',   def: 'TIMESTAMP NULL' },
+                    { name: 'suspensionEnd',     def: 'TIMESTAMP NULL' },
+                    { name: 'suspensionDuration',def: 'INT' },
+                    { name: 'suspensionUnit',    def: 'VARCHAR(20)' },
+                    { name: 'suspensionReason',  def: 'TEXT' },
+                    { name: 'suspendedBy',       def: 'VARCHAR(255)' },
+                    { name: 'suspendedByName',   def: 'VARCHAR(255)' },
+                    { name: 'googleId',          def: 'VARCHAR(255)' },
+                ];
+
+                // Check which columns actually exist
+                const [cols] = await pool.query(
+                    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+                     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'`
+                );
+                const existingCols = new Set(cols.map(c => c.COLUMN_NAME));
+
+                for (const col of missingColumns) {
+                    if (!existingCols.has(col.name)) {
+                        try {
+                            await pool.query(`ALTER TABLE users ADD COLUMN \`${col.name}\` ${col.def}`);
+                            console.log(`✅ Added missing column: ${col.name}`);
+                        } catch (colErr) {
+                            console.warn(`⚠️ Could not add column ${col.name}:`, colErr.message);
+                        }
+                    }
+                }
+
+                // Insert the new user
                 await pool.query(
-                    `INSERT INTO users (id, name, email, password, role, barangay, phone, dob, staffingManagement, authProvider, isApproved, createdAt) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-                    [this.id, this.name, this.email, passwordToSave, this.role, this.barangay, this.phone, this.dob, this.staffingManagement, this.authProvider, this.isApproved]
+                    `INSERT INTO users (id, name, email, password, role, barangay, phone, dob, staffingManagement, authProvider, isApproved, status, createdAt) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+                    [this.id, this.name, this.email, this.password, this.role, this.barangay, this.phone, this.dob, this.staffingManagement, this.authProvider, this.isApproved, this.status || 'active']
                 );
                 
                 console.log(`✅ User saved to MySQL successfully: ${this.id}`);
@@ -66,20 +102,48 @@ export class User {
     }
 
     static async findById(id) {
-        const pool = getPool();
+        const pool = requirePool();
         try {
+            console.log(`🔍 UserMySQL.findById called with ID: "${id}"`);
+            console.log(`   ID type: ${typeof id}`);
+            console.log(`   ID length: ${id ? id.length : 'null'}`);
+            
             const [rows] = await pool.query('SELECT * FROM users WHERE id = ?', [id]);
+            
+            console.log(`   Query result: ${rows.length} row(s) found`);
+            
+            if (rows.length > 0) {
+                console.log(`   ✅ Found user: ${rows[0].name} (${rows[0].email})`);
+            } else {
+                console.log(`   ❌ No user found with ID: "${id}"`);
+                
+                // Debug: Show similar IDs
+                const [similar] = await pool.query('SELECT id, name, email FROM users WHERE id LIKE ? LIMIT 5', [`%${id.substring(0, 10)}%`]);
+                if (similar.length > 0) {
+                    console.log(`   💡 Similar IDs in database:`);
+                    similar.forEach(s => console.log(`      - ${s.id} (${s.name})`));
+                }
+            }
+            
             return rows.length > 0 ? new User(rows[0]) : null;
         } catch (error) {
-            console.error('Error finding user by ID:', error);
+            console.error('❌ Error finding user by ID:', error);
             throw error;
         }
     }
 
     static async findByEmail(email) {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const [rows] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
+            console.log(`🔍 findByEmail(${email}): found ${rows.length} row(s)`);
+            if (rows.length > 0) {
+                console.log(`   Row data:`, JSON.stringify(rows[0]));
+            } else {
+                // Debug: show all users in DB
+                const [allUsers] = await pool.query('SELECT id, name, email, role FROM users LIMIT 10');
+                console.log(`   All users in DB (up to 10):`, JSON.stringify(allUsers));
+            }
             return rows.length > 0 ? new User(rows[0]) : null;
         } catch (error) {
             console.error('Error finding user by email:', error);
@@ -88,7 +152,7 @@ export class User {
     }
 
     static async findByRole(role) {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const [rows] = await pool.query(
                 'SELECT * FROM users WHERE role = ? ORDER BY createdAt DESC',
@@ -102,12 +166,16 @@ export class User {
     }
 
     static async findPendingStaff() {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const [rows] = await pool.query(
-                'SELECT * FROM users WHERE role = ? AND isApproved = FALSE ORDER BY createdAt DESC',
+                'SELECT * FROM users WHERE role = ? AND (isApproved = 0 OR isApproved IS NULL) ORDER BY createdAt DESC',
                 ['staff']
             );
+            console.log(`📋 Found ${rows.length} pending staff in database (isApproved = 0 or NULL)`);
+            if (rows.length > 0) {
+                console.log(`   Pending staff: ${rows.map(r => `${r.name} (isApproved=${r.isApproved})`).join(', ')}`);
+            }
             return rows.map(row => new User(row));
         } catch (error) {
             console.error('Error finding pending staff:', error);
@@ -116,7 +184,7 @@ export class User {
     }
 
     static async findAll() {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const [rows] = await pool.query('SELECT * FROM users ORDER BY createdAt DESC');
             return rows.map(row => new User(row));
@@ -132,12 +200,24 @@ export class User {
     }
 
     static async approveStaff(staffId) {
-        const pool = getPool();
+        const pool = requirePool();
         try {
-            await pool.query(
-                'UPDATE users SET isApproved = TRUE, updatedAt = NOW() WHERE id = ? AND role = ?',
+            console.log(`💾 Updating database: Setting isApproved = 1 for staff ${staffId}`);
+            const [result] = await pool.query(
+                'UPDATE users SET isApproved = 1, updatedAt = NOW() WHERE id = ? AND role = ?',
                 [staffId, 'staff']
             );
+            console.log(`✅ Database updated: ${result.affectedRows} row(s) affected`);
+            
+            // Verify the update
+            const [rows] = await pool.query(
+                'SELECT id, name, email, isApproved FROM users WHERE id = ?',
+                [staffId]
+            );
+            if (rows.length > 0) {
+                console.log(`✅ Verified: ${rows[0].name} - isApproved = ${rows[0].isApproved}`);
+            }
+            
             return true;
         } catch (error) {
             console.error('Error approving staff:', error);
@@ -146,7 +226,7 @@ export class User {
     }
 
     static async rejectStaff(staffId) {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             await pool.query('DELETE FROM users WHERE id = ? AND role = ?', [staffId, 'staff']);
             return true;
@@ -156,9 +236,55 @@ export class User {
         }
     }
 
+    static async suspendStaff(staffId, suspensionData) {
+        const pool = requirePool();
+        try {
+            const { 
+                status, 
+                suspensionStart, 
+                suspensionEnd, 
+                suspensionDuration, 
+                suspensionUnit, 
+                suspensionReason,
+                suspendedBy,
+                suspendedByName
+            } = suspensionData;
+            
+            await pool.query(
+                `UPDATE users SET 
+                    status = ?,
+                    suspensionStart = ?,
+                    suspensionEnd = ?,
+                    suspensionDuration = ?,
+                    suspensionUnit = ?,
+                    suspensionReason = ?,
+                    suspendedBy = ?,
+                    suspendedByName = ?,
+                    updatedAt = NOW()
+                WHERE id = ? AND role = ?`,
+                [
+                    status,
+                    suspensionStart,
+                    suspensionEnd,
+                    suspensionDuration,
+                    suspensionUnit,
+                    suspensionReason,
+                    suspendedBy,
+                    suspendedByName,
+                    staffId,
+                    'staff'
+                ]
+            );
+            return true;
+        } catch (error) {
+            console.error('Error suspending staff:', error);
+            throw error;
+        }
+    }
+
     // Update user (for staff CRUD)
     static async update(id, data) {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const { name, email, barangay, phone, dob } = data;
             
@@ -178,7 +304,7 @@ export class User {
 
     // Delete user (for staff CRUD)
     static async delete(id) {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const [result] = await pool.query('DELETE FROM users WHERE id = ?', [id]);
             
@@ -192,3 +318,4 @@ export class User {
 }
 
 export default User;
+

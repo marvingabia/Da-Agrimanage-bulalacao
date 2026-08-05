@@ -327,6 +327,8 @@
             color: white;
             font-size: 0.9rem;
             line-height: 1.4;
+            position: relative;
+            overflow: hidden;
         }
         
         .alert.error {
@@ -336,7 +338,77 @@
         
         .alert.success {
             background: rgba(16, 185, 129, 0.2);
-            border: 1px solid rgba(16, 185, 129, 0.3);
+            border: 1px solid rgba(16, 185, 129, 0.4);
+            border-left: 4px solid #10b981;
+        }
+
+        /* Slide-in animation for alerts */
+        @keyframes alertSlideIn {
+            from { opacity: 0; transform: translateY(-16px) scale(0.97); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .animate-alert {
+            animation: alertSlideIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+        }
+
+        /* Auto-dismiss progress bar */
+        .success-progress-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 3px;
+            background: #10b981;
+            border-radius: 0 0 12px 12px;
+            animation: shrinkBar 6s linear forwards;
+        }
+        @keyframes shrinkBar {
+            from { width: 100%; }
+            to   { width: 0%; }
+        }
+
+        /* Toast popup (JS-created) */
+        .login-toast {
+            position: fixed;
+            top: 1.5rem;
+            right: 1.5rem;
+            z-index: 99999;
+            background: #fff;
+            border-left: 5px solid #10b981;
+            border-radius: 14px;
+            padding: 1rem 1.25rem;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            max-width: 360px;
+            min-width: 280px;
+            animation: toastIn 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+        }
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateX(120%); }
+            to   { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes toastOut {
+            from { opacity: 1; transform: translateX(0); }
+            to   { opacity: 0; transform: translateX(120%); }
+        }
+        .login-toast-icon {
+            background: #dcfce7;
+            border-radius: 50%;
+            width: 38px;
+            height: 38px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .login-toast-body { flex: 1; min-width: 0; }
+        .login-toast-title { font-weight: 700; color: #166534; font-size: 0.95rem; }
+        .login-toast-msg   { font-size: 0.85rem; color: #374151; margin-top: 0.2rem; }
+        .login-toast-close {
+            background: none; border: none; color: #9ca3af;
+            cursor: pointer; font-size: 1.2rem; line-height: 1;
+            flex-shrink: 0; padding: 0;
         }
         
         .role-selector {
@@ -608,16 +680,24 @@
             </div>
             
             {{#if error}}
-            <div class="alert error">
+            <div class="alert error animate-alert">
                 <i class="fas fa-exclamation-triangle me-2"></i>
                 {{error}}
             </div>
             {{/if}}
             
             {{#if success}}
-            <div class="alert success">
-                <i class="fas fa-check-circle me-2"></i>
-                {{success}}
+            <div class="alert success animate-alert" id="server-success-alert">
+                <div style="display:flex;align-items:flex-start;gap:0.75rem;">
+                    <div style="background:rgba(16,185,129,0.3);border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <i class="fas fa-check-circle" style="color:#6ee7b7;font-size:1.1rem;"></i>
+                    </div>
+                    <div>
+                        <div style="font-weight:700;margin-bottom:0.2rem;">Registration Successful!</div>
+                        <div style="font-size:0.88rem;opacity:0.9;">{{success}}</div>
+                    </div>
+                </div>
+                <div class="success-progress-bar" id="success-progress"></div>
             </div>
             {{/if}}
             
@@ -694,7 +774,10 @@
             </div>
             
             <div class="register-link">
-                Don't have an account? <a href="#" onclick="openRegisterModal('farmer')">Register as Farmer</a>
+                Don't have an account?
+                <a href="#" onclick="openRegisterModal('farmer')">Register as Farmer</a>
+                &nbsp;|&nbsp;
+                <a href="#" onclick="openRegisterModal('staff')" style="color: #a5b4fc;">Register as Staff</a>
             </div>
         </div>
     </div>
@@ -779,74 +862,77 @@
     <div id="staffModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3 class="modal-title">Staff Registration</h3>
+                <h3 class="modal-title"><i class="fas fa-user-tie me-2"></i>Staff Registration</h3>
                 <button class="close-btn" onclick="closeModal('staffModal')">&times;</button>
             </div>
-            <form id="staffRegisterForm" action="/register" method="POST">
-                <input type="hidden" name="role" value="staff">
+
+            <!-- Step indicator -->
+            <div style="text-align:center; margin-bottom:1rem;">
+                <span style="background:rgba(16,185,129,0.2); color:#6ee7b7; padding:0.4rem 1rem; border-radius:20px; font-size:0.82rem;">
+                    <i class="fas fa-info-circle me-1"></i>Your account will be reviewed by admin before you can login
+                </span>
+            </div>
+
+            <div id="staffRegisterError" style="display:none;" class="alert error animate-alert">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <span id="staffRegisterErrorMsg"></span>
+            </div>
+
+            <form id="staffRegisterForm" onsubmit="submitStaffRegistration(event)">
                 <div class="form-group">
-                    <label class="form-label">Full Name</label>
+                    <label class="form-label">Full Name *</label>
                     <input type="text" class="form-control" name="name" placeholder="Enter your full name" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Email Address</label>
+                    <label class="form-label">Email Address *</label>
                     <input type="email" class="form-control" name="email" placeholder="Enter your email" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Phone Number</label>
-                    <input type="tel" class="form-control" name="phone" placeholder="Enter your phone number" required>
+                    <label class="form-label">Phone Number *</label>
+                    <input type="tel" class="form-control" name="phone" placeholder="09xxxxxxxxx" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Barangay</label>
+                    <label class="form-label">Barangay *</label>
                     <select class="form-control" name="barangay" required style="color: #1e293b;">
-                        <option value="" style="color: #6b7280;">Select Barangay</option>
-                        <option value="Bagong Sikat" style="background: white; color: #1e293b;">Bagong Sikat</option>
-                        <option value="Balatasan" style="background: white; color: #1e293b;">Balatasan</option>
-                        <option value="Benli" style="background: white; color: #1e293b;">Benli</option>
-                        <option value="Cabugao" style="background: white; color: #1e293b;">Cabugao</option>
-                        <option value="Cambunang" style="background: white; color: #1e293b;">Cambunang</option>
-                        <option value="Campaasan" style="background: white; color: #1e293b;">Campaasan</option>
-                        <option value="Maasin" style="background: white; color: #1e293b;">Maasin</option>
-                        <option value="Maujao" style="background: white; color: #1e293b;">Maujao</option>
-                        <option value="Milagrosa" style="background: white; color: #1e293b;">Milagrosa</option>
-                        <option value="Nasukob" style="background: white; color: #1e293b;">Nasukob</option>
-                        <option value="Poblacion" style="background: white; color: #1e293b;">Poblacion</option>
-                        <option value="San Francisco" style="background: white; color: #1e293b;">San Francisco</option>
-                        <option value="San Isidro" style="background: white; color: #1e293b;">San Isidro</option>
-                        <option value="San Juan" style="background: white; color: #1e293b;">San Juan</option>
-                        <option value="San Roque" style="background: white; color: #1e293b;">San Roque</option>
+                        <option value="" style="color:#6b7280;">Select Barangay</option>
+                        <option value="Bagong Sikat">Bagong Sikat</option>
+                        <option value="Balatasan">Balatasan</option>
+                        <option value="Benli">Benli</option>
+                        <option value="Cabugao">Cabugao</option>
+                        <option value="Cambunang">Cambunang</option>
+                        <option value="Campaasan">Campaasan</option>
+                        <option value="Maasin">Maasin</option>
+                        <option value="Maujao">Maujao</option>
+                        <option value="Milagrosa">Milagrosa</option>
+                        <option value="Nasukob">Nasukob</option>
+                        <option value="Poblacion">Poblacion</option>
+                        <option value="San Francisco">San Francisco</option>
+                        <option value="San Isidro">San Isidro</option>
+                        <option value="San Juan">San Juan</option>
+                        <option value="San Roque">San Roque</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Password</label>
-                    <input type="password" class="form-control" id="staffPassword" name="password" placeholder="Create a password" required minlength="6">
+                    <label class="form-label">Date of Birth *</label>
+                    <input type="date" class="form-control" name="dob" id="staffDob" required style="color:#1e293b;">
+                    <small style="color:rgba(255,255,255,0.6); font-size:0.8rem;">Must be at least 18 years old</small>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Confirm Password</label>
+                    <label class="form-label">Password *</label>
+                    <input type="password" class="form-control" id="staffPassword" name="password" placeholder="Create a password (min. 6 characters)" required minlength="6">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Confirm Password *</label>
                     <input type="password" class="form-control" id="staffConfirmPassword" placeholder="Re-enter your password" required minlength="6">
-                    <small id="staffPasswordError" class="text-danger" style="display: none; margin-top: 0.5rem;">
+                    <small id="staffPasswordError" style="display:none; color:#f87171; font-size:0.82rem; margin-top:0.4rem;">
                         <i class="fas fa-exclamation-circle me-1"></i>Passwords do not match!
                     </small>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Staffing Management</label>
-                    <select class="form-control" name="staffingManagement" required style="color: #1e293b;">
-                        <option value="" style="color: #6b7280;">Select Staffing Management</option>
-                        <option value="Workforce Planning" style="background: white; color: #1e293b;">Workforce Planning</option>
-                        <option value="Recruitment" style="background: white; color: #1e293b;">Recruitment</option>
-                        <option value="Selection" style="background: white; color: #1e293b;">Selection</option>
-                        <option value="Onboarding" style="background: white; color: #1e293b;">Onboarding</option>
-                        <option value="Succession Planning" style="background: white; color: #1e293b;">Succession Planning</option>
-                        <option value="Retention" style="background: white; color: #1e293b;">Retention</option>
-                        <option value="Performance Management" style="background: white; color: #1e293b;">Performance Management</option>
-                    </select>
-                </div>
-                <button type="submit" class="btn login-btn">
-                    <i class="fas fa-user-tie me-2"></i>Register as Staff
+                <button type="submit" class="btn login-btn" id="staffSubmitBtn">
+                    <i class="fas fa-paper-plane me-2"></i>Submit Registration
                 </button>
             </form>
         </div>
-    </div>
     </div>
     <!-- End of login-container -->
     
@@ -864,20 +950,13 @@
                 // Update hidden input
                 document.getElementById('selectedRole').value = this.dataset.role;
                 
-                // Update placeholder and prefill admin credentials
+                // Update placeholder based on role
                 const emailInput = document.getElementById('email');
-                const passwordInput = document.getElementById('password');
                 const role = this.dataset.role;
-                
-                // Clear previous values
-                emailInput.value = '';
-                passwordInput.value = '';
                 
                 switch(role) {
                     case 'admin':
-                        emailInput.placeholder = 'admin@gmail.com';
-                        emailInput.value = 'admin@gmail.com';
-                        passwordInput.value = 'Admin2025';
+                        emailInput.placeholder = 'e.g., admin@gmail.com';
                         break;
                     case 'staff':
                         emailInput.placeholder = 'e.g., staff@gmail.com';
@@ -885,13 +964,6 @@
                     case 'farmer':
                         emailInput.placeholder = 'e.g., farmer@gmail.com';
                         break;
-                }
-                
-                // Show registration option for staff and farmer
-                if (role === 'staff') {
-                    setTimeout(() => openRegisterModal('staff'), 300);
-                } else if (role === 'farmer') {
-                    setTimeout(() => openRegisterModal('farmer'), 300);
                 }
             });
         });
@@ -943,6 +1015,16 @@
             const modal = document.getElementById(type + 'Modal');
             modal.classList.add('show');
             document.body.style.overflow = 'hidden';
+            
+            // Set max date for DOB (18 years ago) if staff modal
+            if (type === 'staff') {
+                const dobInput = modal.querySelector('input[name="dob"]');
+                if (dobInput) {
+                    const today = new Date();
+                    const maxDate = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
+                    dobInput.max = maxDate.toISOString().split('T')[0];
+                }
+            }
         }
         
         function closeModal(modalId) {
@@ -1018,30 +1100,81 @@
             });
         }
         
-        document.getElementById('staffRegisterForm').addEventListener('submit', function(e) {
-            const submitBtn = this.querySelector('button[type="submit"]');
-            
-            // Validate password match
-            if (staffPassword && staffConfirmPassword && staffPassword.value !== staffConfirmPassword.value) {
-                e.preventDefault();
-                
-                alert('Password Mismatch!\n\nYour passwords do not match. Please make sure both password fields are the same.');
-                
-                staffConfirmPassword.focus();
+        // ── Staff Registration AJAX Submit ────────────────────────────────
+        async function submitStaffRegistration(e) {
+            e.preventDefault();
+
+            const form = e.target;
+            const submitBtn = document.getElementById('staffSubmitBtn');
+            const errBox  = document.getElementById('staffRegisterError');
+            const errMsg  = document.getElementById('staffRegisterErrorMsg');
+
+            // Password match check
+            const pw  = document.getElementById('staffPassword').value;
+            const cpw = document.getElementById('staffConfirmPassword').value;
+            if (pw !== cpw) {
+                document.getElementById('staffPasswordError').style.display = 'block';
                 return;
             }
-            
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Creating Account...';
+            document.getElementById('staffPasswordError').style.display = 'none';
+
+            // Age check (18+)
+            const dob = new Date(document.getElementById('staffDob').value);
+            const age = Math.floor((Date.now() - dob) / (365.25 * 24 * 3600 * 1000));
+            if (age < 18) {
+                errMsg.textContent = 'You must be at least 18 years old to register.';
+                errBox.style.display = 'block';
+                return;
+            }
+            errBox.style.display = 'none';
+
+            // Loading state
+            const orig = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Submitting...';
             submitBtn.disabled = true;
-            
-            // Show loading message
-            const loadingMsg = document.createElement('div');
-            loadingMsg.className = 'text-center mt-2';
-            loadingMsg.style.color = 'rgba(255, 255, 255, 0.8)';
-            loadingMsg.style.fontSize = '0.9rem';
-            loadingMsg.innerHTML = 'Creating your staff account. You will need to login after registration...';
-            submitBtn.parentNode.appendChild(loadingMsg);
-        });
+
+            const data = new URLSearchParams(new FormData(form));
+            data.set('role', 'staff');
+
+            try {
+                const res  = await fetch('/register', { method: 'POST', body: data });
+                const html = await res.text();
+
+                // The server redirects or re-renders login with success/error
+                // Parse it to extract the message
+                const parser  = new DOMParser();
+                const doc     = parser.parseFromString(html, 'text/html');
+                const success = doc.querySelector('.alert.success');
+                const error   = doc.querySelector('.alert.error');
+
+                if (success || res.url.includes('/dashboard')) {
+                    // Close modal & show toast
+                    closeModal('staffModal');
+                    form.reset();
+                    setTimeout(() => showLoginToast(
+                        'Registration submitted! Your account is pending admin approval. You will be notified once approved.',
+                        'success'
+                    ), 200);
+                } else if (error) {
+                    errMsg.textContent = error.textContent.trim();
+                    errBox.style.display = 'block';
+                } else {
+                    // Unknown response — show generic success (server likely redirected)
+                    closeModal('staffModal');
+                    form.reset();
+                    setTimeout(() => showLoginToast(
+                        'Registration submitted! Waiting for admin approval before you can login.',
+                        'success'
+                    ), 200);
+                }
+            } catch (err) {
+                errMsg.textContent = 'Network error. Please try again.';
+                errBox.style.display = 'block';
+            } finally {
+                submitBtn.innerHTML = orig;
+                submitBtn.disabled = false;
+            }
+        }
         
         // Google OAuth Configuration
         let googleInitialized = false;
@@ -1360,46 +1493,63 @@
             }
         }
         
-        // Show success message
+        // Show success message (toast popup)
         function showSuccessMessage(message) {
-            const successMsg = document.createElement('div');
-            successMsg.className = 'alert';
-            successMsg.style.background = 'rgba(16, 185, 129, 0.2)';
-            successMsg.style.borderColor = 'rgba(16, 185, 129, 0.3)';
-            successMsg.innerHTML = '<i class="fas fa-check-circle me-2"></i>' + message;
-            
-            const loginCard = document.querySelector('.login-card');
-            loginCard.insertBefore(successMsg, loginCard.firstChild);
-            
-            // Remove after 3 seconds
-            setTimeout(() => {
-                if (successMsg.parentNode) {
-                    successMsg.remove();
-                }
-            }, 3000);
+            showLoginToast(message, 'success');
         }
         
-        // Show error message
+        // Show error message (toast popup)
         function showErrorMessage(message) {
-            const errorMsg = document.createElement('div');
-            errorMsg.className = 'alert';
-            errorMsg.style.background = 'rgba(220, 53, 69, 0.2)';
-            errorMsg.style.borderColor = 'rgba(220, 53, 69, 0.3)';
-            errorMsg.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>' + message;
-            
-            const loginCard = document.querySelector('.login-card');
-            loginCard.insertBefore(errorMsg, loginCard.firstChild);
-            
-            // Remove after 5 seconds
+            showLoginToast(message, 'error');
+        }
+
+        // Unified toast function
+        function showLoginToast(message, type) {
+            const isSuccess = type === 'success';
+            const toast = document.createElement('div');
+            toast.className = 'login-toast';
+            toast.style.borderLeftColor = isSuccess ? '#10b981' : '#ef4444';
+            toast.innerHTML = `
+                <div class="login-toast-icon" style="background:${isSuccess ? '#dcfce7' : '#fee2e2'};">
+                    <i class="fas ${isSuccess ? 'fa-check-circle' : 'fa-exclamation-circle'}"
+                       style="color:${isSuccess ? '#16a34a' : '#dc2626'};font-size:1.1rem;"></i>
+                </div>
+                <div class="login-toast-body">
+                    <div class="login-toast-title" style="color:${isSuccess ? '#166534' : '#991b1b'};">
+                        ${isSuccess ? '✅ Success!' : '❌ Error'}
+                    </div>
+                    <div class="login-toast-msg">${message}</div>
+                </div>
+                <button class="login-toast-close" onclick="this.closest('.login-toast').remove()">&times;</button>
+            `;
+            document.body.appendChild(toast);
+            // Auto-remove after 6s
             setTimeout(() => {
-                if (errorMsg.parentNode) {
-                    errorMsg.remove();
-                }
-            }, 5000);
+                toast.style.animation = 'toastOut 0.35s ease forwards';
+                setTimeout(() => toast.remove(), 350);
+            }, 6000);
         }
         
         // Auto-focus email input and handle registered users
         document.addEventListener('DOMContentLoaded', function() {
+
+            // ── Show toast if server rendered a success message ──────────
+            const serverAlert = document.getElementById('server-success-alert');
+            if (serverAlert) {
+                // Also fire the toast popup version
+                const msgEl = serverAlert.querySelector('div > div > div:last-child');
+                const msg = msgEl ? msgEl.textContent.trim() : 'Registration successful!';
+                setTimeout(() => showLoginToast(msg, 'success'), 300);
+
+                // Auto-hide the inline card alert after 6s
+                setTimeout(() => {
+                    serverAlert.style.transition = 'opacity 0.5s, transform 0.5s';
+                    serverAlert.style.opacity = '0';
+                    serverAlert.style.transform = 'translateY(-8px)';
+                    setTimeout(() => serverAlert.remove(), 500);
+                }, 6000);
+            }
+
             // Check if user just registered
             const registeredEmail = '{{registeredEmail}}';
             const registeredRole = '{{registeredRole}}';

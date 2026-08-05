@@ -67,7 +67,7 @@
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Contact Number *</label>
-                            <input type="tel" class="form-control" name="contactNumber" placeholder="09xxxxxxxxx" required>
+                            <input type="tel" class="form-control" name="contactNumber" value="{{user.phone}}" placeholder="09xxxxxxxxx" required>
                         </div>
                     </div>
                     
@@ -185,6 +185,23 @@
                         <label class="form-label">Additional Notes</label>
                         <textarea class="form-control" name="additionalNotes" rows="2" placeholder="Any additional information..."></textarea>
                     </div>
+
+                    <!-- Evidence Images Upload -->
+                    <hr class="my-4">
+                    <h6 class="mb-3 text-success">
+                        <i class="fas fa-camera me-2"></i>Evidence Photos <span class="text-muted fw-normal">(Optional but recommended)</span>
+                    </h6>
+                    <div id="evidence-upload-area" style="border:2px dashed #cbd5e1; border-radius:12px; padding:1.5rem; text-align:center; cursor:pointer; transition:all 0.3s; background:#f8fafc;"
+                         onclick="document.getElementById('evidenceImagesInput').click()"
+                         ondragover="event.preventDefault(); this.style.borderColor='#22c55e'; this.style.background='#f0fdf4';"
+                         ondragleave="this.style.borderColor='#cbd5e1'; this.style.background='#f8fafc';"
+                         ondrop="handleEvidenceDrop(event)">
+                        <i class="fas fa-cloud-upload-alt" style="font-size:2rem; color:#94a3b8; display:block; margin-bottom:0.5rem;"></i>
+                        <p style="margin:0; color:#64748b;">Drag & drop or <strong style="color:#22c55e;">browse photos</strong></p>
+                        <p style="margin:0; color:#94a3b8; font-size:0.8rem;">JPG, PNG — max 3 photos, 3MB each</p>
+                    </div>
+                    <input type="file" id="evidenceImagesInput" accept="image/*" multiple style="display:none;" onchange="previewEvidenceImages(event)">
+                    <div id="evidence-preview" style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-top:0.75rem;"></div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -226,7 +243,9 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function loadDamageReports() {
-    fetch('/api/damage-reports')
+    const userRole = document.body.getAttribute('data-user-role') || window.USER_ROLE || 'farmer';
+    const endpoint = userRole === 'farmer' ? '/api/farmer/damage-reports' : '/api/damage-reports';
+    fetch(endpoint)
         .then(response => response.json())
         .then(data => {
             const tbody = document.getElementById('damage-reports-table');
@@ -262,19 +281,38 @@ function loadDamageReports() {
                         <td><strong>${report.affectedArea} ha</strong></td>
                         <td><span class="premium-badge ${statusClass}"><i class="fas ${statusIcon} me-1"></i>${report.status}</span></td>
                         <td>
-                            <button class="premium-btn premium-btn-info" style="padding: 0.5rem 1rem;" onclick="viewDamageReport('${report.id}')" title="View Details">
-                                <i class="fas fa-eye me-1"></i>View
-                            </button>
-                            {{#if (eq user.role 'staff')}}
-                            ${report.status === 'pending' ? `
-                                <button class="premium-btn premium-btn-success" style="padding: 0.5rem 1rem; margin-left: 0.5rem;" onclick="verifyDamageReport('${report.id}')" title="Verify Report">
-                                    <i class="fas fa-check me-1"></i>Verify
+                            <div style="display:flex; gap:0.35rem; align-items:center; flex-wrap:nowrap;">
+                                <button onclick="viewDamageReport('${report.id}')" title="View Details"
+                                    style="background:linear-gradient(135deg,#3b82f6,#2563eb); color:white; border:none; padding:0.4rem 0.75rem; border-radius:8px; font-size:0.78rem; font-weight:600; cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:4px;">
+                                    <i class="fas fa-eye"></i> View
+                                    ${report.evidenceImages ? `<span style="background:rgba(255,255,255,0.3); font-size:0.65rem; padding:1px 4px; border-radius:6px;"><i class="fas fa-camera"></i>${(() => { try { return JSON.parse(report.evidenceImages).length; } catch(e) { return ''; } })()}</span>` : ''}
                                 </button>
-                                <button class="premium-btn premium-btn-danger" style="padding: 0.5rem 1rem; margin-left: 0.5rem;" onclick="rejectDamageReport('${report.id}')" title="Reject Report">
-                                    <i class="fas fa-times me-1"></i>Reject
+                                {{#if (eq user.role 'farmer')}}
+                                ${report.status === 'pending' ? `
+                                <button onclick="editDamageReportPhotos('${report.id}')" title="Add/Edit Photos"
+                                    style="background:linear-gradient(135deg,#f59e0b,#d97706); color:white; border:none; padding:0.4rem 0.75rem; border-radius:8px; font-size:0.78rem; font-weight:600; cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:4px;">
+                                    <i class="fas fa-camera"></i> ${report.evidenceImages ? 'Edit Photos' : 'Add Photos'}
+                                </button>` : ''}
+                                {{/if}}
+                                {{#if (eq user.role 'staff')}}
+                                ${report.status === 'pending' ? `
+                                <button onclick="verifyDamageReport('${report.id}')" title="Verify"
+                                    style="background:linear-gradient(135deg,#22c55e,#16a34a); color:white; border:none; padding:0.4rem 0.75rem; border-radius:8px; font-size:0.78rem; font-weight:600; cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:4px;">
+                                    <i class="fas fa-check"></i> Verify
                                 </button>
-                            ` : ''}
-                            {{/if}}
+                                <button onclick="rejectDamageReport('${report.id}')" title="Reject"
+                                    style="background:linear-gradient(135deg,#ef4444,#dc2626); color:white; border:none; padding:0.4rem 0.75rem; border-radius:8px; font-size:0.78rem; font-weight:600; cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:4px;">
+                                    <i class="fas fa-times"></i> Reject
+                                </button>
+                                ` : `<span style="font-size:0.75rem; color:#64748b; font-style:italic;">${report.status === 'verified' ? '✅ Verified' : '❌ Rejected'}</span>`}
+                                {{/if}}
+                                {{#if (eq user.role 'admin')}}
+                                <button onclick="deleteDamageReport('${report.id}')" title="Delete"
+                                    style="background:linear-gradient(135deg,#ef4444,#dc2626); color:white; border:none; padding:0.4rem 0.75rem; border-radius:8px; font-size:0.78rem; font-weight:600; cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:4px;">
+                                    <i class="fas fa-trash"></i> Delete
+                                </button>
+                                {{/if}}
+                            </div>
                         </td>
                     </tr>
                 `}).join('');
@@ -294,6 +332,22 @@ function loadDamageReports() {
         });
 }
 
+// Make globally accessible for auto-refresh
+window.loadDamageReports = loadDamageReports;
+
+// Auto-refresh for staff/admin every 10 seconds when section is visible
+(function() {
+    const userRole = document.body.getAttribute('data-user-role') || window.USER_ROLE || '';
+    if (userRole === 'staff' || userRole === 'admin') {
+        setInterval(function() {
+            const section = document.getElementById('damage-reports-section');
+            if (section && section.style.display !== 'none') {
+                loadDamageReports();
+            }
+        }, 10000);
+    }
+})();
+
 function submitDamageReport(event) {
     event.preventDefault();
     
@@ -312,7 +366,8 @@ function submitDamageReport(event) {
         damagePercentage: parseInt(formData.get('damagePercentage')) || 0,
         estimatedLoss: parseFloat(formData.get('estimatedLoss')) || 0,
         damageDescription: formData.get('damageDescription'),
-        additionalNotes: formData.get('additionalNotes')
+        additionalNotes: formData.get('additionalNotes'),
+        evidenceImages: window._evidenceImages ? JSON.stringify(window._evidenceImages) : null
     };
     
     // Get modal reference
@@ -332,8 +387,10 @@ function submitDamageReport(event) {
         document.body.style.removeProperty('padding-right');
     }, 100);
     
-    // Reset form immediately
+    // Reset form and evidence images
     event.target.reset();
+    window._evidenceImages = [];
+    document.getElementById('evidence-preview').innerHTML = '';
     
     // Show success popup after modal is closed
     setTimeout(() => {
@@ -348,17 +405,21 @@ function submitDamageReport(event) {
     })
     .then(response => response.json())
     .then(result => {
-        console.log('✅ Damage report saved:', result);
-        // Reload damage reports silently
-        setTimeout(() => loadDamageReports(), 500);
-        // Update dashboard count
-        if (typeof loadDashboardData === 'function') {
-            setTimeout(() => loadDashboardData(), 600);
+        if (result.success) {
+            console.log('✅ Damage report saved:', result);
+        } else {
+            console.error('❌ Server error saving damage report:', result.error);
         }
     })
     .catch(error => {
-        console.error('⚠️ Error saving damage report (will retry):', error);
-        // Still works - success already shown
+        console.error('⚠️ Error saving damage report:', error);
+    })
+    .finally(() => {
+        // Always reload the table whether success or fail
+        setTimeout(() => loadDamageReports(), 600);
+        if (typeof loadDashboardData === 'function') {
+            setTimeout(() => loadDashboardData(), 700);
+        }
     });
 }
 
@@ -368,56 +429,90 @@ function viewDamageReport(reportId) {
         .then(data => {
             if (data.success) {
                 const report = data.damageReport;
+
+                // Parse evidence images safely
+                let evidenceImgs = [];
+                if (report.evidenceImages) {
+                    try { evidenceImgs = JSON.parse(report.evidenceImages); } catch(e) {}
+                }
+                // Store globally for lightbox
+                window._viewEvidenceImgs = evidenceImgs;
+
                 const content = `
                     <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <strong>Report ID:</strong> #${report.id}
+                        <div class="col-md-6 mb-2">
+                            <span class="text-muted small">Report ID</span>
+                            <div><strong>#${report.id}</strong></div>
                         </div>
-                        <div class="col-md-6 mb-3">
-                            <strong>Status:</strong> <span class="badge-status ${report.status}">${report.status}</span>
+                        <div class="col-md-6 mb-2">
+                            <span class="text-muted small">Status</span>
+                            <div><span class="badge ${report.status === 'verified' ? 'bg-success' : report.status === 'rejected' ? 'bg-danger' : 'bg-warning text-dark'} text-uppercase">${report.status}</span></div>
                         </div>
                     </div>
                     <hr>
-                    <h6 class="text-primary mb-3">Farmer Information</h6>
-                    <div class="row mb-3">
-                        <div class="col-md-6"><strong>Name:</strong> ${report.farmerName}</div>
-                        <div class="col-md-6"><strong>Contact:</strong> ${report.contactNumber}</div>
-                        <div class="col-md-6"><strong>Barangay:</strong> ${report.barangay}</div>
-                        <div class="col-md-6"><strong>Location:</strong> ${report.location}</div>
+                    <h6 class="text-primary mb-2"><i class="fas fa-user me-1"></i>Farmer Information</h6>
+                    <div class="row mb-2">
+                        <div class="col-md-6 mb-1"><span class="text-muted small">Name</span><div><strong>${report.farmerName}</strong></div></div>
+                        <div class="col-md-6 mb-1"><span class="text-muted small">Contact</span><div>${report.contactNumber || 'N/A'}</div></div>
+                        <div class="col-md-6 mb-1"><span class="text-muted small">Barangay</span><div>${report.barangay}</div></div>
+                        <div class="col-md-6 mb-1"><span class="text-muted small">Location</span><div>${report.location || 'N/A'}</div></div>
                     </div>
                     <hr>
-                    <h6 class="text-danger mb-3">Incident Details</h6>
-                    <div class="row mb-3">
-                        <div class="col-md-6"><strong>Date:</strong> ${new Date(report.incidentDate).toLocaleDateString()}</div>
-                        <div class="col-md-6"><strong>Disaster Type:</strong> ${report.disasterType}</div>
+                    <h6 class="text-danger mb-2"><i class="fas fa-bolt me-1"></i>Incident Details</h6>
+                    <div class="row mb-2">
+                        <div class="col-md-6 mb-1"><span class="text-muted small">Date</span><div>${new Date(report.incidentDate).toLocaleDateString('en-US', {year:'numeric',month:'long',day:'numeric'})}</div></div>
+                        <div class="col-md-6 mb-1"><span class="text-muted small">Disaster Type</span><div><span class="badge bg-danger">${report.disasterType}</span></div></div>
                     </div>
                     <hr>
-                    <h6 class="text-warning mb-3">Crop Damage Information</h6>
-                    <div class="row mb-3">
-                        <div class="col-md-6"><strong>Crop Type:</strong> ${report.cropType}</div>
-                        <div class="col-md-6"><strong>Crop Stage:</strong> ${report.cropStage}</div>
-                        <div class="col-md-4"><strong>Affected Area:</strong> ${report.affectedArea} hectares</div>
-                        <div class="col-md-4"><strong>Damage Extent:</strong> ${report.damagePercentage}%</div>
-                        <div class="col-md-4"><strong>Estimated Loss:</strong> ₱${report.estimatedLoss ? report.estimatedLoss.toLocaleString() : '0'}</div>
+                    <h6 class="text-warning mb-2"><i class="fas fa-seedling me-1"></i>Crop Damage</h6>
+                    <div class="row mb-2">
+                        <div class="col-md-4 mb-1"><span class="text-muted small">Crop Type</span><div>${report.cropType}</div></div>
+                        <div class="col-md-4 mb-1"><span class="text-muted small">Crop Stage</span><div>${report.cropStage || 'N/A'}</div></div>
+                        <div class="col-md-4 mb-1"><span class="text-muted small">Affected Area</span><div><strong>${report.affectedArea} ha</strong></div></div>
+                        <div class="col-md-4 mb-1"><span class="text-muted small">Damage Extent</span><div><strong>${report.damagePercentage}%</strong></div></div>
+                        <div class="col-md-4 mb-1"><span class="text-muted small">Estimated Loss</span><div><strong>₱${report.estimatedLoss ? Number(report.estimatedLoss).toLocaleString() : '0'}</strong></div></div>
                     </div>
-                    <div class="mb-3">
-                        <strong>Description:</strong>
-                        <p class="mt-2">${report.damageDescription}</p>
+                    <div class="mb-2">
+                        <span class="text-muted small">Description</span>
+                        <div style="background:#f8fafc; border-radius:8px; padding:0.75rem; margin-top:4px;">${report.damageDescription}</div>
                     </div>
                     ${report.additionalNotes ? `
-                        <div class="mb-3">
-                            <strong>Additional Notes:</strong>
-                            <p class="mt-2">${report.additionalNotes}</p>
-                        </div>
-                    ` : ''}
+                    <div class="mb-2">
+                        <span class="text-muted small">Additional Notes</span>
+                        <div style="background:#f8fafc; border-radius:8px; padding:0.75rem; margin-top:4px;">${report.additionalNotes}</div>
+                    </div>` : ''}
+
+                    ${evidenceImgs.length > 0 ? `
+                    <hr>
+                    <h6 class="text-success mb-2"><i class="fas fa-camera me-1"></i>Evidence Photos <span class="badge bg-success">${evidenceImgs.length}</span></h6>
+                    <div style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-bottom:0.5rem;">
+                        ${evidenceImgs.map((img, i) => `
+                            <div style="position:relative; cursor:pointer;" onclick="openEvidenceLightbox(${i})" title="Click to enlarge">
+                                <img src="${img}" alt="Evidence ${i+1}"
+                                    style="width:140px; height:110px; object-fit:cover; border-radius:10px; border:3px solid #22c55e; transition:transform 0.2s;"
+                                    onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                                <div style="position:absolute; bottom:4px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.65); color:white; font-size:0.65rem; padding:2px 8px; border-radius:6px; white-space:nowrap;">
+                                    <i class="fas fa-search-plus me-1"></i>Photo ${i+1}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <p style="font-size:0.78rem; color:#64748b;"><i class="fas fa-info-circle me-1"></i>Click any photo to view full size</p>
+                    ` : `
+                    <hr>
+                    <div style="background:#f8fafc; border-radius:10px; padding:1rem; text-align:center; color:#94a3b8;">
+                        <i class="fas fa-camera" style="font-size:1.5rem; margin-bottom:0.5rem; display:block;"></i>
+                        <span style="font-size:0.85rem;">No evidence photos uploaded</span>
+                    </div>`}
+
                     ${report.verificationNotes ? `
-                        <hr>
-                        <div class="alert alert-info">
-                            <strong>Verification Notes:</strong>
-                            <p class="mb-0">${report.verificationNotes}</p>
-                        </div>
-                    ` : ''}
+                    <hr>
+                    <div class="alert alert-info mb-0">
+                        <strong><i class="fas fa-clipboard-check me-1"></i>Verification Notes:</strong>
+                        <p class="mb-0 mt-1">${report.verificationNotes}</p>
+                    </div>` : ''}
                 `;
+
                 document.getElementById('viewDamageContent').innerHTML = content;
                 new bootstrap.Modal(document.getElementById('viewDamageModal')).show();
             }
@@ -426,6 +521,43 @@ function viewDamageReport(reportId) {
             console.error('Error:', error);
             showErrorPopup('Error', 'Error loading damage report details');
         });
+}
+
+// Lightbox for evidence photos
+function openEvidenceLightbox(index) {
+    const imgs = window._viewEvidenceImgs || [];
+    if (!imgs.length) return;
+
+    // Remove existing lightbox
+    const existing = document.getElementById('evidenceLightbox');
+    if (existing) existing.remove();
+
+    const lb = document.createElement('div');
+    lb.id = 'evidenceLightbox';
+    lb.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.92); z-index:99999; display:flex; align-items:center; justify-content:center; flex-direction:column;';
+    lb.innerHTML = `
+        <div style="position:relative; max-width:90vw; max-height:80vh;">
+            <img id="lb-img" src="${imgs[index]}" style="max-width:90vw; max-height:75vh; border-radius:12px; object-fit:contain; box-shadow:0 20px 60px rgba(0,0,0,0.5);">
+            <div style="position:absolute; top:-40px; right:0; color:white; font-size:0.9rem; opacity:0.8;">Photo <span id="lb-counter">${index+1}</span> of ${imgs.length}</div>
+        </div>
+        <div style="display:flex; gap:1rem; margin-top:1rem; align-items:center;">
+            ${imgs.length > 1 ? `
+            <button onclick="lbNav(-1)" style="background:rgba(255,255,255,0.2); color:white; border:none; width:44px; height:44px; border-radius:50%; font-size:1.2rem; cursor:pointer;">‹</button>` : ''}
+            <button onclick="document.getElementById('evidenceLightbox').remove()" style="background:#ef4444; color:white; border:none; padding:0.5rem 1.5rem; border-radius:8px; font-weight:600; cursor:pointer;"><i class="fas fa-times me-1"></i>Close</button>
+            ${imgs.length > 1 ? `
+            <button onclick="lbNav(1)" style="background:rgba(255,255,255,0.2); color:white; border:none; width:44px; height:44px; border-radius:50%; font-size:1.2rem; cursor:pointer;">›</button>` : ''}
+        </div>
+    `;
+    lb.addEventListener('click', function(e) { if (e.target === lb) lb.remove(); });
+    document.body.appendChild(lb);
+    window._lbIndex = index;
+}
+
+function lbNav(dir) {
+    const imgs = window._viewEvidenceImgs || [];
+    window._lbIndex = (window._lbIndex + dir + imgs.length) % imgs.length;
+    document.getElementById('lb-img').src = imgs[window._lbIndex];
+    document.getElementById('lb-counter').textContent = window._lbIndex + 1;
 }
 
 function verifyDamageReport(reportId) {
@@ -497,6 +629,213 @@ function showErrorPopup(title, message) {
     document.getElementById('errorPopupTitle').textContent = title;
     document.getElementById('errorPopupMessage').textContent = message;
     new bootstrap.Modal(document.getElementById('errorPopup')).show();
+
+function deleteDamageReport(reportId) {
+    if (!confirm('⚠️ Delete this damage report?\n\nThis action cannot be undone.')) return;
+    fetch('/api/admin/delete-damage-report/' + reportId, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                loadDamageReports();
+                const toast = document.createElement('div');
+                toast.style.cssText = 'position:fixed;bottom:2rem;right:2rem;background:#22c55e;color:white;padding:0.875rem 1.5rem;border-radius:12px;font-weight:600;z-index:99999;box-shadow:0 8px 25px rgba(0,0,0,0.2);';
+                toast.innerHTML = '<i class="fas fa-check-circle me-2"></i>Damage report deleted.';
+                document.body.appendChild(toast);
+                setTimeout(() => toast.remove(), 3000);
+            } else {
+                alert('Error: ' + (result.error || 'Failed to delete'));
+            }
+        })
+        .catch(err => alert('Delete failed: ' + err.message));
+}
+}
+
+// Evidence Image Upload Functions
+window._evidenceImages = [];
+
+function previewEvidenceImages(event) {
+    const files = Array.from(event.target.files);
+    processEvidenceFiles(files);
+}
+
+function handleEvidenceDrop(event) {
+    event.preventDefault();
+    const files = Array.from(event.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    processEvidenceFiles(files);
+    document.getElementById('evidence-upload-area').style.borderColor = '#cbd5e1';
+    document.getElementById('evidence-upload-area').style.background = '#f8fafc';
+}
+
+function processEvidenceFiles(files) {
+    if (!window._evidenceImages) window._evidenceImages = [];
+    const remaining = 3 - window._evidenceImages.length;
+    if (remaining <= 0) { alert('Maximum 3 photos allowed.'); return; }
+    const toProcess = files.slice(0, remaining);
+    toProcess.forEach(file => {
+        if (file.size > 3 * 1024 * 1024) { alert(`${file.name} is too large. Max 3MB per photo.`); return; }
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            window._evidenceImages.push(e.target.result);
+            renderEvidencePreviews();
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+function renderEvidencePreviews() {
+    const container = document.getElementById('evidence-preview');
+    if (!container) return;
+    container.innerHTML = window._evidenceImages.map((img, i) => `
+        <div style="position:relative; display:inline-block;">
+            <img src="${img}" style="width:100px; height:80px; object-fit:cover; border-radius:8px; border:2px solid #22c55e;">
+            <button type="button" onclick="removeEvidenceImage(${i})"
+                style="position:absolute; top:-6px; right:-6px; width:20px; height:20px; background:#ef4444; color:white; border:none; border-radius:50%; font-size:0.7rem; cursor:pointer; line-height:1;">✕</button>
+            <div style="text-align:center; font-size:0.7rem; color:#64748b; margin-top:2px;">Photo ${i+1}</div>
+        </div>
+    `).join('');
+}
+
+function removeEvidenceImage(index) {
+    window._evidenceImages.splice(index, 1);
+    renderEvidencePreviews();
+}
+
+// Edit Photos for existing damage report
+function editDamageReportPhotos(reportId) {
+    window._editReportId = reportId;
+    window._editImages = [];
+
+    // Load existing images first
+    fetch(`/api/damage-reports/${reportId}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success && data.damageReport.evidenceImages) {
+                try { window._editImages = JSON.parse(data.damageReport.evidenceImages); } catch(e) {}
+            }
+            renderEditPreviews();
+            const modal = new bootstrap.Modal(document.getElementById('editPhotosModal'));
+            modal.show();
+        });
+}
+
+function renderEditPreviews() {
+    const container = document.getElementById('edit-photos-preview');
+    if (!container) return;
+    if (window._editImages.length === 0) {
+        container.innerHTML = '<p style="color:#94a3b8; font-size:0.85rem; text-align:center; padding:0.5rem;">No photos yet. Upload below.</p>';
+        return;
+    }
+    container.innerHTML = window._editImages.map((img, i) => `
+        <div style="position:relative; display:inline-block;">
+            <img src="${img}" style="width:110px; height:85px; object-fit:cover; border-radius:8px; border:2px solid #22c55e;">
+            <button type="button" onclick="removeEditImage(${i})"
+                style="position:absolute; top:-6px; right:-6px; width:20px; height:20px; background:#ef4444; color:white; border:none; border-radius:50%; font-size:0.7rem; cursor:pointer; line-height:1;">✕</button>
+            <div style="text-align:center; font-size:0.7rem; color:#64748b; margin-top:2px;">Photo ${i+1}</div>
+        </div>
+    `).join('');
+}
+
+function removeEditImage(index) {
+    window._editImages.splice(index, 1);
+    renderEditPreviews();
+}
+
+function handleEditPhotos(event) {
+    const files = Array.from(event.target.files);
+    const remaining = 5 - window._editImages.length;
+    if (remaining <= 0) { alert('Maximum 5 photos allowed.'); return; }
+    files.slice(0, remaining).forEach(file => {
+        if (file.size > 3 * 1024 * 1024) { alert(`${file.name} too large. Max 3MB.`); return; }
+        const reader = new FileReader();
+        reader.onload = e => { window._editImages.push(e.target.result); renderEditPreviews(); };
+        reader.readAsDataURL(file);
+    });
+}
+
+function saveEditPhotos() {
+    const reportId = window._editReportId;
+    if (!reportId) return;
+
+    const btn = document.getElementById('save-edit-photos-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Saving...';
+
+    fetch(`/api/farmer/damage-report/${reportId}/photos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ evidenceImages: JSON.stringify(window._editImages) })
+    })
+    .then(r => r.json())
+    .then(result => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save me-1"></i>Save Photos';
+        if (result.success) {
+            bootstrap.Modal.getInstance(document.getElementById('editPhotosModal')).hide();
+            loadDamageReports();
+            const toast = document.createElement('div');
+            toast.style.cssText = 'position:fixed;bottom:2rem;right:2rem;background:#22c55e;color:white;padding:0.875rem 1.5rem;border-radius:12px;font-weight:600;z-index:99999;box-shadow:0 8px 25px rgba(0,0,0,0.2);';
+            toast.innerHTML = '<i class="fas fa-check-circle me-2"></i>Evidence photos updated!';
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        } else {
+            alert('Error: ' + (result.error || 'Failed to save photos'));
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save me-1"></i>Save Photos';
+        alert('Error saving photos: ' + err.message);
+    });
+}
+</script>
+
+<!-- Success Popup Modal for Damage Reports -->
+<!-- Edit Photos Modal -->
+<div class="modal fade" id="editPhotosModal" tabindex="-1">
+    <div class="modal-dialog modal-md">
+        <div class="modal-content" style="border-radius:16px; overflow:hidden;">
+            <div class="modal-header" style="background:linear-gradient(135deg,#f59e0b,#d97706); color:white; border:none;">
+                <h5 class="modal-title"><i class="fas fa-camera me-2"></i>Edit Evidence Photos</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:0.85rem; color:#64748b; margin-bottom:1rem;">
+                    <i class="fas fa-info-circle me-1 text-warning"></i>
+                    You can add or remove evidence photos. Max 5 photos, 3MB each.
+                </p>
+
+                <!-- Current Photos Preview -->
+                <div id="edit-photos-preview" style="display:flex; gap:0.75rem; flex-wrap:wrap; min-height:40px; margin-bottom:1rem; padding:0.5rem; background:#f8fafc; border-radius:10px;"></div>
+
+                <!-- Upload Area -->
+                <div style="border:2px dashed #f59e0b; border-radius:12px; padding:1.25rem; text-align:center; cursor:pointer; background:#fffbeb;"
+                     onclick="document.getElementById('editPhotosInput').click()"
+                     ondragover="event.preventDefault(); this.style.borderColor='#d97706';"
+                     ondragleave="this.style.borderColor='#f59e0b';"
+                     ondrop="handleEditDrop(event)">
+                    <i class="fas fa-cloud-upload-alt" style="font-size:1.75rem; color:#f59e0b; display:block; margin-bottom:0.5rem;"></i>
+                    <p style="margin:0; color:#92400e; font-weight:600;">Click or drag photos here</p>
+                    <p style="margin:0; color:#b45309; font-size:0.78rem;">JPG, PNG — max 3MB each</p>
+                </div>
+                <input type="file" id="editPhotosInput" accept="image/*" multiple style="display:none;" onchange="handleEditPhotos(event)">
+            </div>
+            <div class="modal-footer" style="border:none; padding-top:0;">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" id="save-edit-photos-btn" onclick="saveEditPhotos()"
+                    style="background:linear-gradient(135deg,#f59e0b,#d97706); color:white; border:none; padding:0.6rem 1.5rem; border-radius:8px; font-weight:600; cursor:pointer;">
+                    <i class="fas fa-save me-1"></i>Save Photos
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function handleEditDrop(event) {
+    event.preventDefault();
+    const files = Array.from(event.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    handleEditPhotos({ target: { files } });
+    event.currentTarget.style.borderColor = '#f59e0b';
 }
 </script>
 

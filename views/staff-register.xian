@@ -163,7 +163,7 @@
             </div>
             {{/if}}
             
-            <form action="/staff/register" method="POST">
+            <form action="/register" method="POST">
                 <input type="hidden" name="role" value="staff">
                 
                 <div class="form-group">
@@ -217,16 +217,9 @@
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label">Staffing Management</label>
-                    <select class="form-select" name="staffingManagement" required>
-                        <option value="">Select area...</option>
-                        <option value="Recruitment">Recruitment</option>
-                        <option value="Training">Training & Development</option>
-                        <option value="Onboarding">Onboarding</option>
-                        <option value="Succession Planning">Succession Planning</option>
-                        <option value="Retention">Retention</option>
-                        <option value="Performance Management">Performance Management</option>
-                    </select>
+                    <label class="form-label">Date of Birth</label>
+                    <input type="date" class="form-control" name="dob" required max="<?php echo date('Y-m-d', strtotime('-18 years')); ?>">
+                    <small class="form-text text-muted">You must be at least 18 years old</small>
                 </div>
                 
                 <div class="alert alert-warning">

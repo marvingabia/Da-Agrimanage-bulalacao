@@ -4,13 +4,19 @@
 
 import { getPool } from '../config/database.js';
 
+function requirePool() {
+    const pool = getPool();
+    if (!pool) throw new Error('MySQL database is not available. Please ensure MySQL/Laragon is running.');
+    return pool;
+}
+
 export class Inventory {
     constructor(data) {
         Object.assign(this, data);
     }
 
     async save() {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             if (!this.id) {
                 this.id = `INV-${Date.now()}`;
@@ -65,7 +71,7 @@ export class Inventory {
     }
 
     static async findAll() {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             console.log('📡 Fetching all inventory from database...');
             const [rows] = await pool.query('SELECT * FROM inventory ORDER BY createdAt DESC');
@@ -81,7 +87,7 @@ export class Inventory {
     }
 
     static async findById(id) {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const [rows] = await pool.query('SELECT * FROM inventory WHERE id = ?', [id]);
             return rows.length > 0 ? new Inventory(rows[0]) : null;
@@ -93,3 +99,5 @@ export class Inventory {
 }
 
 export default Inventory;
+
+

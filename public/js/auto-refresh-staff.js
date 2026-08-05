@@ -3,8 +3,8 @@
  * Automatically updates lists when farmers submit new items
  */
 
-// Auto-refresh interval (30 seconds)
-const REFRESH_INTERVAL = 30000;
+// Auto-refresh interval (10 seconds for near real-time)
+const REFRESH_INTERVAL = 10000;
 
 // Track last counts to detect changes
 let lastCounts = {

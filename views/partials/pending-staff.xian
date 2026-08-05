@@ -140,6 +140,11 @@ function displayPendingStaff(staff) {
     const container = document.getElementById('pendingStaffTable');
     if (!container) return;
     
+    console.log(`📋 Displaying ${staff.length} pending staff members`);
+    if (staff.length > 0) {
+        console.log('📋 Staff IDs:', staff.map(s => `${s.name}: ${s.id}`).join(', '));
+    }
+    
     if (staff.length === 0) {
         container.innerHTML = `
             <tr>
@@ -177,17 +182,24 @@ function displayPendingStaff(staff) {
 
 // Approve staff member
 async function approveStaffMember(staffId, name) {
+    console.log(`🔍 Approve button clicked for: ${name} (ID: ${staffId})`);
+    
     if (!confirm(`Approve ${name} as staff member? They will be able to login after approval.`)) {
         return;
     }
     
     try {
+        console.log(`📤 Sending approval request to: /api/admin/approve-staff/${staffId}`);
+        
         const response = await fetch(`/api/admin/approve-staff/${staffId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         });
         
+        console.log(`📥 Response status: ${response.status}`);
+        
         const result = await response.json();
+        console.log(`📥 Response data:`, result);
         
         if (result.success) {
             alert(`✅ ${name} has been approved! They can now login.`);
@@ -196,7 +208,7 @@ async function approveStaffMember(staffId, name) {
             alert(`❌ Failed to approve: ${result.error}`);
         }
     } catch (error) {
-        console.error('Error approving staff:', error);
+        console.error('❌ Error approving staff:', error);
         alert('❌ Failed to approve staff member');
     }
 }

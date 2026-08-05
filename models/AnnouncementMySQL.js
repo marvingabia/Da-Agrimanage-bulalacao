@@ -4,13 +4,19 @@
 
 import { getPool } from '../config/database.js';
 
+function requirePool() {
+    const pool = getPool();
+    if (!pool) throw new Error('MySQL database is not available. Please ensure MySQL/Laragon is running.');
+    return pool;
+}
+
 export class Announcement {
     constructor(data) {
         Object.assign(this, data);
     }
 
     async save() {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             if (!this.id) {
                 this.id = `ANN-${Date.now()}`;
@@ -54,7 +60,7 @@ export class Announcement {
     }
 
     static async findAll() {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const [rows] = await pool.query('SELECT * FROM announcements ORDER BY createdAt DESC');
             return rows.map(row => {
@@ -75,7 +81,7 @@ export class Announcement {
     }
 
     static async findActive() {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const [rows] = await pool.query(
                 'SELECT * FROM announcements WHERE status = ? ORDER BY createdAt DESC',
@@ -99,7 +105,7 @@ export class Announcement {
     }
 
     static async findById(id) {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const [rows] = await pool.query('SELECT * FROM announcements WHERE id = ?', [id]);
             if (rows.length > 0) {
@@ -121,7 +127,7 @@ export class Announcement {
     }
 
     static async findByBarangay(barangay) {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const [rows] = await pool.query(
                 `SELECT * FROM announcements 
@@ -138,3 +144,5 @@ export class Announcement {
 }
 
 export default Announcement;
+
+

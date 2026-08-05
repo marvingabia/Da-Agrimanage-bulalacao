@@ -15,31 +15,76 @@
         </div>
     </div>
 
-    <div class="premium-table-container">
-        <table class="premium-table" style="--header-color-1: #f59e0b; --header-color-2: #d97706; --hover-color: #fef3c7;">
-            <thead>
-                <tr>
-                    <th>Farmer Name</th>
-                    <th>Barangay</th>
-                    <th>Benefit Type</th>
-                    <th>Item</th>
-                    <th>Quantity</th>
-                    <th>Value</th>
-                    <th>Distribution Date</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="benefits-table">
-                <tr>
-                    <td colspan="9" class="premium-empty-state">
-                        <i class="fas fa-hand-holding-usd" style="color: #f59e0b;"></i>
-                        <p class="mb-0">No benefits distributed yet</p>
-                        <small>Benefits will appear here automatically</small>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
+    <!-- For Claim Section -->
+    <div class="mb-4">
+        <div class="d-flex align-items-center justify-content-between mb-3" style="padding: 1rem; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); border-radius: 12px;">
+            <h5 class="mb-0 text-white">
+                <i class="fas fa-clock me-2"></i>For Claim
+            </h5>
+            <span class="badge bg-white text-warning" id="for-claim-count" style="font-size: 1rem; padding: 0.5rem 1rem;">0</span>
+        </div>
+        <div class="premium-table-container">
+            <table class="premium-table" style="--header-color-1: #f59e0b; --header-color-2: #d97706; --hover-color: #fef3c7;">
+                <thead>
+                    <tr>
+                        <th>Farmer Name</th>
+                        <th>Barangay</th>
+                        <th>Benefit Type</th>
+                        <th>Item</th>
+                        <th>Quantity</th>
+                        <th>Value</th>
+                        <th>Distribution Date</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="for-claim-table">
+                    <tr>
+                        <td colspan="9" class="premium-empty-state">
+                            <i class="fas fa-clock" style="color: #f59e0b;"></i>
+                            <p class="mb-0">No benefits for claim</p>
+                            <small>Distributed benefits will appear here</small>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Claimed Section -->
+    <div>
+        <div class="d-flex align-items-center justify-content-between mb-3" style="padding: 1rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-radius: 12px;">
+            <h5 class="mb-0 text-white">
+                <i class="fas fa-check-circle me-2"></i>Claimed
+            </h5>
+            <span class="badge bg-white text-success" id="claimed-count" style="font-size: 1rem; padding: 0.5rem 1rem;">0</span>
+        </div>
+        <div class="premium-table-container">
+            <table class="premium-table" style="--header-color-1: #10b981; --header-color-2: #059669; --hover-color: #d1fae5;">
+                <thead>
+                    <tr>
+                        <th>Farmer Name</th>
+                        <th>Barangay</th>
+                        <th>Benefit Type</th>
+                        <th>Item</th>
+                        <th>Quantity</th>
+                        <th>Value</th>
+                        <th>Distribution Date</th>
+                        <th>Claimed Date</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="claimed-table">
+                    <tr>
+                        <td colspan="9" class="premium-empty-state">
+                            <i class="fas fa-check-circle" style="color: #10b981;"></i>
+                            <p class="mb-0">No claimed benefits yet</p>
+                            <small>Claimed benefits will appear here</small>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 
@@ -202,7 +247,7 @@ function loadClaims() {
 }
 
 function loadBenefits() {
-    console.log('📡 Fetching benefits from /api/benefits... [VERSION 2.0 - FIXED]');
+    console.log('📡 Fetching benefits from /api/benefits... [VERSION 3.0 - SEPARATED LISTS]');
     
     fetch('/api/benefits')
         .then(response => {
@@ -211,82 +256,122 @@ function loadBenefits() {
         })
         .then(data => {
             console.log('📦 Benefits data received:', data);
-            const tbody = document.getElementById('benefits-table');
+            const forClaimTbody = document.getElementById('for-claim-table');
+            const claimedTbody = document.getElementById('claimed-table');
             
-            if (!tbody) {
-                console.error('❌ benefits-table element not found!');
+            if (!forClaimTbody || !claimedTbody) {
+                console.error('❌ Table elements not found!');
                 return;
             }
             
             if (data.success && data.benefits && data.benefits.length > 0) {
                 console.log(`✅ Processing ${data.benefits.length} benefits...`);
                 
+                // Log all benefit statuses for debugging
+                data.benefits.forEach((b, i) => {
+                    console.log(`   Benefit ${i + 1}: ${b.farmerName} - Status: "${b.status}" - ID: ${b.id}`);
+                });
+                
+                // Separate benefits by status
+                const forClaimBenefits = data.benefits.filter(b => 
+                    b.status === 'for_claim' || b.status === 'pending' || b.status === 'distributed'
+                );
+                const claimedBenefits = data.benefits.filter(b => 
+                    b.status === 'claimed'
+                );
+                
+                console.log(`📊 For Claim: ${forClaimBenefits.length}, Claimed: ${claimedBenefits.length}`);
+                
                 try {
-                    tbody.innerHTML = data.benefits.map(benefit => {
-                    const statusClass = benefit.status === 'claimed' ? 'premium-badge-approved' : 
-                                      benefit.status === 'expired' ? 'premium-badge-rejected' : 
-                                      'premium-badge-pending';
-                    const statusIcon = benefit.status === 'claimed' ? 'fa-check-circle' : 
-                                     benefit.status === 'expired' ? 'fa-times-circle' : 
-                                     'fa-clock';
-                    
-                    return `
-                    <tr class="animate-fade-in">
-                        <td><strong>${benefit.farmerName}</strong></td>
-                        <td><span class="badge bg-secondary">${benefit.barangay}</span></td>
-                        <td><span class="badge bg-info"><i class="fas fa-gift me-1"></i>${benefit.benefitType}</span></td>
-                        <td><strong>${benefit.itemName}</strong></td>
-                        <td><span class="badge bg-success">${benefit.quantity} ${benefit.unit}</span></td>
-                        <td><strong style="color: #10b981;">-</strong></td>
-                        <td>${benefit.createdAt ? new Date(benefit.createdAt).toLocaleDateString('en-US', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric'
-                        }) : 'N/A'}</td>
-                        <td><span class="premium-badge ${statusClass}"><i class="fas ${statusIcon} me-1"></i>${benefit.status.replace('_', ' ')}</span></td>
-                        <td>
-                            <button class="premium-btn premium-btn-info" style="padding: 0.5rem 1rem;" onclick="viewBenefit('${benefit.id}')" title="View Details">
-                                <i class="fas fa-eye me-1"></i>View
-                            </button>
-                        </td>
-                    </tr>
-                `}).join('');
-                    
-                    console.log('✅ Benefits table updated successfully');
-                    
-                    // Update badge count
-                    const badge = document.getElementById('benefits-count-badge');
-                    if (badge) {
-                        badge.textContent = `${data.benefits.length} Benefit${data.benefits.length !== 1 ? 's' : ''}`;
+                    // Render For Claim table
+                    if (forClaimBenefits.length > 0) {
+                        forClaimTbody.innerHTML = forClaimBenefits.map(benefit => `
+                            <tr class="animate-fade-in">
+                                <td><strong>${benefit.farmerName}</strong></td>
+                                <td><span class="badge bg-secondary">${benefit.barangay}</span></td>
+                                <td><span class="badge bg-info"><i class="fas fa-gift me-1"></i>${benefit.benefitType}</span></td>
+                                <td><strong>${benefit.itemName}</strong></td>
+                                <td><span class="badge bg-success">${benefit.quantity} ${benefit.unit}</span></td>
+                                <td><strong style="color: #10b981;">₱${benefit.value ? benefit.value.toLocaleString() : '0'}</strong></td>
+                                <td>${benefit.distributionDate ? new Date(benefit.distributionDate).toLocaleDateString('en-US', {
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: 'numeric'
+                                }) : 'N/A'}</td>
+                                <td><span class="premium-badge premium-badge-pending"><i class="fas fa-clock me-1"></i>For Claim</span></td>
+                                <td>
+                                    <button class="premium-btn premium-btn-success" style="padding: 0.5rem 1rem;" onclick="markAsClaimed('${benefit.id}')" title="Mark as Claimed">
+                                        <i class="fas fa-check me-1"></i>Claimed
+                                    </button>
+                                    <button class="premium-btn premium-btn-info" style="padding: 0.5rem 1rem;" onclick="viewBenefit('${benefit.id}')" title="View Details">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        `).join('');
+                    } else {
+                        forClaimTbody.innerHTML = '<tr><td colspan="9" class="premium-empty-state"><i class="fas fa-clock" style="color: #f59e0b;"></i><p class="mb-0">No benefits for claim</p><small>Distributed benefits will appear here</small></td></tr>';
                     }
+                    
+                    // Render Claimed table
+                    if (claimedBenefits.length > 0) {
+                        claimedTbody.innerHTML = claimedBenefits.map(benefit => `
+                            <tr class="animate-fade-in">
+                                <td><strong>${benefit.farmerName}</strong></td>
+                                <td><span class="badge bg-secondary">${benefit.barangay}</span></td>
+                                <td><span class="badge bg-info"><i class="fas fa-gift me-1"></i>${benefit.benefitType}</span></td>
+                                <td><strong>${benefit.itemName}</strong></td>
+                                <td><span class="badge bg-success">${benefit.quantity} ${benefit.unit}</span></td>
+                                <td><strong style="color: #10b981;">₱${benefit.value ? benefit.value.toLocaleString() : '0'}</strong></td>
+                                <td>${benefit.distributionDate ? new Date(benefit.distributionDate).toLocaleDateString('en-US', {
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: 'numeric'
+                                }) : 'N/A'}</td>
+                                <td>${benefit.claimedAt ? new Date(benefit.claimedAt).toLocaleDateString('en-US', {
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: 'numeric'
+                                }) : 'N/A'}</td>
+                                <td>
+                                    <button class="premium-btn premium-btn-info" style="padding: 0.5rem 1rem;" onclick="viewBenefit('${benefit.id}')" title="View Details">
+                                        <i class="fas fa-eye me-1"></i>View
+                                    </button>
+                                </td>
+                            </tr>
+                        `).join('');
+                    } else {
+                        claimedTbody.innerHTML = '<tr><td colspan="9" class="premium-empty-state"><i class="fas fa-check-circle" style="color: #10b981;"></i><p class="mb-0">No claimed benefits yet</p><small>Claimed benefits will appear here</small></td></tr>';
+                    }
+                    
+                    console.log('✅ Benefits tables updated successfully');
+                    
+                    // Update badge counts
+                    document.getElementById('benefits-count-badge').textContent = `${data.benefits.length} Benefit${data.benefits.length !== 1 ? 's' : ''}`;
+                    document.getElementById('for-claim-count').textContent = forClaimBenefits.length;
+                    document.getElementById('claimed-count').textContent = claimedBenefits.length;
+                    
                 } catch (error) {
                     console.error('❌ Error rendering benefits:', error);
-                    console.error('   Error details:', error.message);
-                    console.error('   Problem benefit:', data.benefits.find((b, i) => {
-                        try {
-                            // Try to render each benefit to find which one fails
-                            const test = `${b.farmerName} ${b.barangay}`;
-                            return false;
-                        } catch (e) {
-                            return true;
-                        }
-                    }));
                     throw error;
                 }
             } else {
-                tbody.innerHTML = '<tr><td colspan="9" class="premium-empty-state"><i class="fas fa-hand-holding-usd" style="color: #f59e0b;"></i><p class="mb-0">No benefits distributed yet</p><small>Benefits will appear here automatically</small></td></tr>';
+                forClaimTbody.innerHTML = '<tr><td colspan="9" class="premium-empty-state"><i class="fas fa-clock" style="color: #f59e0b;"></i><p class="mb-0">No benefits for claim</p><small>Distributed benefits will appear here</small></td></tr>';
+                claimedTbody.innerHTML = '<tr><td colspan="9" class="premium-empty-state"><i class="fas fa-check-circle" style="color: #10b981;"></i><p class="mb-0">No claimed benefits yet</p><small>Claimed benefits will appear here</small></td></tr>';
                 document.getElementById('benefits-count-badge').textContent = '0 Benefits';
+                document.getElementById('for-claim-count').textContent = '0';
+                document.getElementById('claimed-count').textContent = '0';
             }
         })
         .catch(error => {
             console.error('❌ Error loading benefits:', error);
-            console.error('   Error type:', error.name);
-            console.error('   Error message:', error.message);
-            console.error('   Error stack:', error.stack);
-            
-            const tbody = document.getElementById('benefits-table');
-            if (tbody) {
-                tbody.innerHTML = '<tr><td colspan="9" class="premium-empty-state text-danger"><i class="fas fa-exclamation-triangle"></i><p class="mb-0">Error loading data</p><small>' + error.message + '</small></td></tr>';
+            const forClaimTbody = document.getElementById('for-claim-table');
+            const claimedTbody = document.getElementById('claimed-table');
+            if (forClaimTbody) {
+                forClaimTbody.innerHTML = '<tr><td colspan="9" class="premium-empty-state text-danger"><i class="fas fa-exclamation-triangle"></i><p class="mb-0">Error loading data</p><small>' + error.message + '</small></td></tr>';
+            }
+            if (claimedTbody) {
+                claimedTbody.innerHTML = '<tr><td colspan="9" class="premium-empty-state text-danger"><i class="fas fa-exclamation-triangle"></i><p class="mb-0">Error loading data</p><small>' + error.message + '</small></td></tr>';
             }
         });
 }
@@ -448,6 +533,66 @@ function submitBenefit(event) {
 
 function viewBenefit(benefitId) {
     alert('View benefit details: ' + benefitId);
+}
+
+function markAsClaimed(benefitId) {
+    Swal.fire({
+        title: 'Mark as Claimed?',
+        text: 'This will move the benefit to the Claimed list.',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#10b981',
+        cancelButtonColor: '#6b7280',
+        confirmButtonText: 'Yes, mark as claimed',
+        cancelButtonText: 'Cancel'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            console.log(`✅ Marking benefit ${benefitId} as claimed...`);
+            
+            fetch(`/api/staff/benefits/${benefitId}/claim`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(response => {
+                console.log('📡 Response status:', response.status);
+                return response.json();
+            })
+            .then(result => {
+                console.log('📦 Server response:', result);
+                if (result.success) {
+                    // Show success message
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Benefit Claimed!',
+                        text: 'The benefit has been marked as claimed and moved to the Claimed list.',
+                        confirmButtonColor: '#10b981',
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                    
+                    // Reload benefits to update both tables
+                    console.log('🔄 Reloading benefits to update lists...');
+                    setTimeout(() => loadBenefits(), 500);
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: result.error || 'Failed to mark benefit as claimed',
+                        confirmButtonColor: '#ef4444'
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('❌ Error marking benefit as claimed:', error);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'An error occurred while marking the benefit as claimed',
+                    confirmButtonColor: '#ef4444'
+                });
+            });
+        }
+    });
 }
 
 // Success popup function

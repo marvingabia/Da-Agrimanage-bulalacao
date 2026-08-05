@@ -19,6 +19,7 @@ import {
     rejectStaff,
     getAllStaff
 } from "../controllers/authController.js";
+import { suspendStaff } from "../controllers/adminController.js";
 import { requireAuth, requireRole, redirectIfAuthenticated } from "../middleware/auth.js";
 
 // Local dashboard stats function for API routes
@@ -188,9 +189,74 @@ router.get("/logout", logoutUser);
 
 // Admin routes - Staff Management
 router.get("/api/admin/pending-staff", requireRole(['admin']), getPendingStaff);
+router.get("/api/admin/pending-staff-count", requireRole(['admin']), async (req, res) => {
+    try {
+        const { User } = await import('../models/UserMySQL.js');
+        const pending = await User.findPendingStaff();
+        res.json({ success: true, count: pending.length, pendingStaff: pending.map(s => ({
+            id: s.id, name: s.name, email: s.email, barangay: s.barangay, createdAt: s.createdAt
+        }))});
+    } catch (e) {
+        res.json({ success: false, count: 0, pendingStaff: [] });
+    }
+});
 router.post("/api/admin/approve-staff/:staffId", requireRole(['admin']), approveStaff);
 router.post("/api/admin/reject-staff/:staffId", requireRole(['admin']), rejectStaff);
 router.get("/api/admin/all-staff", requireRole(['admin']), getAllStaff);
+router.post("/api/admin/suspend-staff/:staffId", requireRole(['admin']), suspendStaff);
+
+// Delete staff
+router.delete("/api/admin/delete-staff/:staffId", requireRole(['admin']), async (req, res) => {
+    try {
+        const { staffId } = req.params;
+        const { User } = await import('../models/UserMySQL.js');
+
+        const staff = await User.findById(staffId);
+        if (!staff) return res.status(404).json({ success: false, error: 'Staff not found' });
+        if (staff.role !== 'staff') return res.status(400).json({ success: false, error: 'User is not a staff member' });
+
+        await User.delete(staffId);
+        console.log(`🗑️ Staff deleted: ${staff.name} by ${req.session.userName}`);
+        res.json({ success: true, message: `${staff.name} has been deleted` });
+    } catch (error) {
+        console.error('❌ Error deleting staff:', error);
+        res.status(500).json({ success: false, error: 'Failed to delete staff: ' + error.message });
+    }
+});
+
+// Delete farmer
+router.delete("/api/admin/delete-farmer/:farmerId", requireRole(['admin']), async (req, res) => {
+    try {
+        const { farmerId } = req.params;
+        const { User } = await import('../models/UserMySQL.js');
+
+        const farmer = await User.findById(farmerId);
+        if (!farmer) return res.status(404).json({ success: false, error: 'Farmer not found' });
+        if (farmer.role !== 'farmer') return res.status(400).json({ success: false, error: 'User is not a farmer' });
+
+        await User.delete(farmerId);
+        console.log(`🗑️ Farmer deleted: ${farmer.name} by ${req.session.userName}`);
+        res.json({ success: true, message: `${farmer.name} has been deleted` });
+    } catch (error) {
+        console.error('❌ Error deleting farmer:', error);
+        res.status(500).json({ success: false, error: 'Failed to delete farmer: ' + error.message });
+    }
+});
+
+// Delete damage report (admin only)
+router.delete("/api/admin/delete-damage-report/:reportId", requireRole(['admin']), async (req, res) => {
+    try {
+        const { reportId } = req.params;
+        const { DamageReport } = await import('../models/DamageReportMySQL.js');
+        const pool = (await import('../config/database.js')).getPool();
+        await pool.query('DELETE FROM damage_reports WHERE id = ?', [reportId]);
+        console.log(`🗑️ Damage report deleted: ${reportId} by ${req.session.userName}`);
+        res.json({ success: true, message: 'Damage report deleted' });
+    } catch (error) {
+        console.error('❌ Error deleting damage report:', error);
+        res.status(500).json({ success: false, error: 'Failed to delete: ' + error.message });
+    }
+});
 
 // Farmer routes
 router.get("/api/farmer/data", requireRole(['farmer']), getFarmerData);
@@ -199,6 +265,29 @@ router.post("/api/farmer/damage-reports", requireRole(['farmer']), submitDamageR
 router.post("/api/farmer/insurance", requireRole(['farmer']), applyInsurance);
 router.get("/api/farmer/claims", requireRole(['farmer']), getFarmerClaims);
 router.get("/api/farmer/damage-reports", requireRole(['farmer']), getFarmerDamageReports);
+
+// Update evidence photos for a damage report (farmer only)
+router.post("/api/farmer/damage-report/:reportId/photos", requireRole(['farmer']), async (req, res) => {
+    try {
+        const { reportId } = req.params;
+        const { evidenceImages } = req.body;
+        const farmerId = req.session.userId;
+
+        const { DamageReport } = await import('../models/DamageReportMySQL.js');
+        const report = await DamageReport.findById(reportId);
+
+        if (!report) return res.status(404).json({ success: false, error: 'Report not found' });
+        if (report.farmerId !== farmerId) return res.status(403).json({ success: false, error: 'Access denied' });
+        if (report.status !== 'pending') return res.status(400).json({ success: false, error: 'Cannot edit a verified/rejected report' });
+
+        await DamageReport.update(reportId, { evidenceImages });
+        console.log(`📸 Evidence photos updated for report ${reportId} by farmer ${farmerId}`);
+        res.json({ success: true, message: 'Photos updated successfully' });
+    } catch (error) {
+        console.error('❌ Error updating photos:', error);
+        res.status(500).json({ success: false, error: 'Failed to update photos: ' + error.message });
+    }
+});
 router.get("/api/farmer/insurance", requireRole(['farmer']), getFarmerInsurance);
 router.get("/api/farmer/announcements", requireRole(['farmer']), getFarmerAnnouncements);
 router.post("/api/farmer/request-letters", requireRole(['farmer']), submitRequestLetter);
@@ -339,13 +428,21 @@ router.post("/api/staff/damage-reports/:id/reject", requireRole(['staff', 'admin
 // Staff routes for benefits/claims
 router.post("/api/staff/benefits/distribute", requireRole(['staff', 'admin']), async (req, res) => {
     try {
+        console.log('📦 Distribute benefit request received');
+        console.log('   Request body:', JSON.stringify(req.body, null, 2));
+        
         const { Benefit } = await import("../models/BenefitMySQL.js");
         const { User } = await import("../models/UserMySQL.js");
         
+        console.log('   Looking for farmer:', req.body.farmerId);
         const farmer = await User.findById(req.body.farmerId);
+        
         if (!farmer) {
+            console.error('❌ Farmer not found:', req.body.farmerId);
             return res.status(404).json({ success: false, error: 'Farmer not found' });
         }
+        
+        console.log('✅ Farmer found:', farmer.name);
         
         const benefitData = {
             ...req.body,
@@ -357,13 +454,58 @@ router.post("/api/staff/benefits/distribute", requireRole(['staff', 'admin']), a
             status: 'for_claim'
         };
         
+        console.log('💾 Saving benefit with data:', JSON.stringify(benefitData, null, 2));
+        
         const benefit = new Benefit(benefitData);
         await benefit.save();
         
+        console.log('✅ Benefit saved successfully');
         res.json({ success: true, benefit });
     } catch (error) {
-        console.error('Error distributing benefit:', error);
-        res.status(500).json({ success: false, error: 'Failed to distribute benefit' });
+        console.error('❌ Error distributing benefit:', error);
+        console.error('   Error message:', error.message);
+        console.error('   Error stack:', error.stack);
+        res.status(500).json({ 
+            success: false, 
+            error: 'Failed to distribute benefit: ' + error.message 
+        });
+    }
+});
+
+// Mark benefit as claimed
+router.post("/api/staff/benefits/:benefitId/claim", requireRole(['staff', 'admin']), async (req, res) => {
+    try {
+        const { benefitId } = req.params;
+        console.log(`📝 Attempting to mark benefit ${benefitId} as claimed...`);
+        console.log(`   User: ${req.session.userName} (${req.session.userId})`);
+        
+        const { Benefit } = await import("../models/BenefitMySQL.js");
+        
+        // Update benefit status to claimed (simplified - only status and timestamp)
+        const updateData = {
+            status: 'claimed',
+            claimedAt: new Date()
+        };
+        
+        console.log(`   Update data:`, updateData);
+        
+        const result = await Benefit.update(benefitId, updateData);
+        
+        console.log(`✅ Benefit ${benefitId} marked as claimed`);
+        console.log(`   Update result:`, result);
+        
+        res.json({ 
+            success: true, 
+            message: 'Benefit marked as claimed successfully' 
+        });
+    } catch (error) {
+        console.error('❌ Error marking benefit as claimed:', error);
+        console.error('   Error message:', error.message);
+        console.error('   Error stack:', error.stack);
+        res.status(500).json({ 
+            success: false, 
+            error: 'Failed to mark benefit as claimed: ' + error.message 
+        });
     }
 });
 
@@ -1025,6 +1167,31 @@ router.get("/api/farmers", requireRole(['staff', 'admin']), async (req, res) => 
     }
 });
 
+// Get new farmer registrations since a given timestamp (for admin/staff notifications)
+router.get("/api/farmers/new-registrations", requireRole(['staff', 'admin']), async (req, res) => {
+    try {
+        const { User } = await import("../models/UserMySQL.js");
+        const since = req.query.since ? new Date(req.query.since) : new Date(Date.now() - 60 * 1000); // default: last 60s
+        const farmers = await User.findByRole('farmer');
+
+        const newFarmers = farmers.filter(f => {
+            const created = new Date(f.createdAt);
+            return created >= since;
+        }).map(f => ({
+            id: f.id,
+            name: f.name,
+            email: f.email,
+            barangay: f.barangay || 'N/A',
+            createdAt: f.createdAt
+        }));
+
+        res.json({ success: true, newFarmers, total: farmers.length });
+    } catch (error) {
+        console.error('Error checking new farmer registrations:', error);
+        res.status(500).json({ success: false, error: 'Failed to check new registrations' });
+    }
+});
+
 // Get all claims (for sidebar counts)
 router.get("/api/claims", requireAuth, async (req, res) => {
     try {
@@ -1234,3 +1401,122 @@ router.get("/partials/request-letters", requireAuth, (req, res) => {
 });
 
 export default router;
+
+
+// ============================================
+// MESSAGING ROUTES (Admin-Staff Communication)
+// ============================================
+
+// Get list of admins (for staff to message)
+router.get("/api/messages/admins", requireRole(['staff']), async (req, res) => {
+    try {
+        const { Message } = await import("../models/MessageMySQL.js");
+        const admins = await Message.getAdminList();
+        res.json({ success: true, admins });
+    } catch (error) {
+        console.error('Error getting admin list:', error);
+        res.status(500).json({ success: false, error: 'Failed to load admins' });
+    }
+});
+
+// Get list of staff (for admin to message)
+router.get("/api/messages/staff", requireRole(['admin']), async (req, res) => {
+    try {
+        const { Message } = await import("../models/MessageMySQL.js");
+        const staff = await Message.getStaffList();
+        res.json({ success: true, staff });
+    } catch (error) {
+        console.error('Error getting staff list:', error);
+        res.status(500).json({ success: false, error: 'Failed to load staff' });
+    }
+});
+
+// Get conversation between current user and another user
+router.get("/api/messages/conversation/:userId", requireAuth, async (req, res) => {
+    try {
+        const { Message } = await import("../models/MessageMySQL.js");
+        const { userId } = req.params;
+        const currentUserId = req.session.userId;
+        
+        const messages = await Message.getConversation(currentUserId, userId);
+        
+        // Mark messages as read
+        await Message.markAsRead(userId, currentUserId);
+        
+        res.json({ success: true, messages });
+    } catch (error) {
+        console.error('Error getting conversation:', error);
+        res.status(500).json({ success: false, error: 'Failed to load conversation' });
+    }
+});
+
+// Send a message
+router.post("/api/messages/send", requireAuth, async (req, res) => {
+    try {
+        console.log('📨 Send message request received');
+        console.log('   Body:', JSON.stringify(req.body, null, 2));
+        console.log('   Session:', {
+            userId: req.session.userId,
+            userName: req.session.userName,
+            userRole: req.session.userRole
+        });
+        
+        const { Message } = await import("../models/MessageMySQL.js");
+        const { receiverId, receiverName, message } = req.body;
+        
+        if (!receiverId || !message) {
+            console.log('❌ Missing required fields');
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Missing required fields: receiverId and message are required' 
+            });
+        }
+        
+        const newMessage = new Message({
+            senderId: req.session.userId,
+            senderName: req.session.userName || req.session.userEmail,
+            senderRole: req.session.userRole,
+            receiverId: receiverId,
+            receiverName: receiverName,
+            receiverRole: req.session.userRole === 'admin' ? 'staff' : 'admin',
+            message: message,
+            isRead: false
+        });
+        
+        console.log('💾 Saving message...');
+        await newMessage.save();
+        console.log('✅ Message saved successfully');
+        
+        res.json({ success: true, message: 'Message sent successfully' });
+    } catch (error) {
+        console.error('❌ Error sending message:', error);
+        console.error('   Error details:', error.message);
+        console.error('   Stack:', error.stack);
+        res.status(500).json({ success: false, error: 'Failed to send message: ' + error.message });
+    }
+});
+
+// Get unread message count
+router.get("/api/messages/unread-count", requireAuth, async (req, res) => {
+    try {
+        const { Message } = await import("../models/MessageMySQL.js");
+        const count = await Message.getUnreadCount(req.session.userId);
+        res.json({ success: true, count });
+    } catch (error) {
+        console.error('Error getting unread count:', error);
+        res.status(500).json({ success: false, error: 'Failed to get unread count' });
+    }
+});
+
+// Get all conversations for current user
+router.get("/api/messages/conversations", requireAuth, async (req, res) => {
+    try {
+        const { Message } = await import("../models/MessageMySQL.js");
+        const conversations = await Message.getUserConversations(req.session.userId);
+        res.json({ success: true, conversations });
+    } catch (error) {
+        console.error('Error getting conversations:', error);
+        res.status(500).json({ success: false, error: 'Failed to load conversations' });
+    }
+});
+

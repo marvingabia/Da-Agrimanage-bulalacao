@@ -110,3 +110,18 @@ temp/
 # Security - Admin creation script with credentials
 create-admin.sql
 create-admin-*.sql
+
+# SQL files with sensitive data (use setup-database.sql only)
+sample-users-data.sql
+
+# Windows utility scripts
+kill-port-3000.ps1
+
+# Electron (not needed for web deployment)
+electron/
+
+# VS Code workspace settings
+.vscode/
+
+# Deployment config (Vercel - update before pushing if needed)
+# vercel.json

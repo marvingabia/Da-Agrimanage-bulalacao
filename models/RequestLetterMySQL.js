@@ -4,13 +4,19 @@
 
 import { getPool } from '../config/database.js';
 
+function requirePool() {
+    const pool = getPool();
+    if (!pool) throw new Error('MySQL database is not available. Please ensure MySQL/Laragon is running.');
+    return pool;
+}
+
 export class RequestLetter {
     constructor(data) {
         Object.assign(this, data);
     }
 
     async save() {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             if (!this.id) {
                 this.id = `REQ-${Date.now()}`;
@@ -31,7 +37,7 @@ export class RequestLetter {
     }
 
     async respond(response, respondedBy, status, actionTaken) {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             await pool.query(
                 `UPDATE request_letters SET response = ?, respondedBy = ?, respondedAt = NOW(), 
@@ -50,7 +56,7 @@ export class RequestLetter {
     }
 
     static async findAll() {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const [rows] = await pool.query('SELECT * FROM request_letters ORDER BY createdAt DESC');
             return rows.map(row => new RequestLetter(row));
@@ -61,7 +67,7 @@ export class RequestLetter {
     }
 
     static async findById(id) {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const [rows] = await pool.query('SELECT * FROM request_letters WHERE id = ?', [id]);
             return rows.length > 0 ? new RequestLetter(rows[0]) : null;
@@ -72,7 +78,7 @@ export class RequestLetter {
     }
 
     static async findByFarmer(farmerId) {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const [rows] = await pool.query(
                 'SELECT * FROM request_letters WHERE farmerId = ? ORDER BY createdAt DESC',
@@ -92,3 +98,5 @@ export class RequestLetter {
 }
 
 export default RequestLetter;
+
+

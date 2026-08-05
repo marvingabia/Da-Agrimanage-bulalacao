@@ -179,7 +179,7 @@
                 <a href="/staff/login" class="btn btn-hero btn-login">
                     <i class="fas fa-sign-in-alt me-2"></i>Staff Login
                 </a>
-                <a href="/staff/register" class="btn btn-hero btn-register">
+                <a href="/register" class="btn btn-hero btn-register">
                     <i class="fas fa-user-plus me-2"></i>Register as Staff
                 </a>
             </div>

@@ -5,13 +5,19 @@
 
 import { getPool } from '../config/database.js';
 
+function requirePool() {
+    const pool = getPool();
+    if (!pool) throw new Error('MySQL database is not available. Please ensure MySQL/Laragon is running.');
+    return pool;
+}
+
 export class Conversation {
     constructor(data) {
         Object.assign(this, data);
     }
 
     async save() {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             if (!this.id) {
                 this.id = `MSG-${Date.now()}`;
@@ -32,7 +38,7 @@ export class Conversation {
     }
 
     static async findAll() {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const [rows] = await pool.query(
                 'SELECT * FROM conversations ORDER BY createdAt DESC'
@@ -45,7 +51,7 @@ export class Conversation {
     }
 
     static async findById(id) {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const [rows] = await pool.query('SELECT * FROM conversations WHERE id = ?', [id]);
             return rows.length > 0 ? new Conversation(rows[0]) : null;
@@ -56,7 +62,7 @@ export class Conversation {
     }
 
     static async findBySender(senderId) {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const [rows] = await pool.query(
                 'SELECT * FROM conversations WHERE senderId = ? ORDER BY createdAt DESC',
@@ -70,7 +76,7 @@ export class Conversation {
     }
 
     static async findByReceiver(receiverId) {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const [rows] = await pool.query(
                 'SELECT * FROM conversations WHERE receiverId = ? OR receiverId IS NULL ORDER BY createdAt DESC',
@@ -84,7 +90,7 @@ export class Conversation {
     }
 
     static async findConversation(userId1, userId2) {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const [rows] = await pool.query(
                 `SELECT * FROM conversations 
@@ -100,7 +106,7 @@ export class Conversation {
     }
 
     static async markAsRead(id) {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             await pool.query(
                 'UPDATE conversations SET isRead = TRUE WHERE id = ?',
@@ -114,7 +120,7 @@ export class Conversation {
     }
 
     static async getUnreadCount(userId) {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const [rows] = await pool.query(
                 'SELECT COUNT(*) as count FROM conversations WHERE receiverId = ? AND isRead = FALSE',
@@ -128,7 +134,7 @@ export class Conversation {
     }
 
     static async deleteMessage(id) {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             await pool.query('DELETE FROM conversations WHERE id = ?', [id]);
             return true;
@@ -140,3 +146,5 @@ export class Conversation {
 }
 
 export default Conversation;
+
+

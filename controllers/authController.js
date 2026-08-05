@@ -77,18 +77,6 @@ export const loginUser = async (req, res) => {
   const { email, password, role } = req.body;
   
   try {
-    // Handle admin login separately
-    if (email === 'admin@gmail.com' && password === 'Admin2025') {
-      req.session.userId = 'admin-default-user';
-      req.session.userRole = 'admin';
-      req.session.userName = 'System Administrator';
-      req.session.userBarangay = 'Main Office';
-      req.session.userEmail = 'admin@gmail.com';
-      
-      console.log('Admin login successful, redirecting to dashboard');
-      return res.redirect("/dashboard");
-    }
-
     // Try to find user in MySQL database first
     let user = null;
     try {
@@ -97,25 +85,11 @@ export const loginUser = async (req, res) => {
       
       if (user) {
         console.log(`✅ User found in MySQL: ${user.name} (${user.role})`);
-        
-        // Also add to local storage for session management
-        localUsers.set(email, {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          password: user.password,
-          role: user.role,
-          barangay: user.barangay,
-          phone: user.phone,
-          status: 'active',
-          approved: user.isApproved,
-          isApproved: user.isApproved,
-          authProvider: user.authProvider || 'email',
-          createdAt: user.createdAt
-        });
+      } else {
+        console.log(`⚠️ User not found in MySQL for email: ${email}`);
       }
     } catch (dbError) {
-      console.log('⚠️ MySQL not available, checking local storage');
+      console.error('❌ MySQL error during login:', dbError.message);
     }
     
     // Fallback to local storage if not found in MySQL
@@ -126,7 +100,26 @@ export const loginUser = async (req, res) => {
         console.log(`✅ User found in local storage: ${user.name} (${user.role})`);
       }
     }
-    
+
+    // Fallback: check .env admin credentials if still not found
+    if (!user) {
+      const adminEmail = process.env.ADMIN_EMAIL;
+      const adminPassword = process.env.ADMIN_PASSWORD;
+      if (adminEmail && email === adminEmail) {
+        console.log('⚠️ Using .env fallback admin account');
+        user = {
+          id: 'admin-001',
+          name: 'System Administrator',
+          email: adminEmail,
+          password: adminPassword,
+          role: 'admin',
+          barangay: 'Main Office',
+          status: 'active',
+          isApproved: true
+        };
+      }
+    }
+
     if (!user) {
       return res.render("login", { 
         title: "iBarangay Login - Agricultural Management System",
@@ -134,12 +127,47 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    // Check password (in production, use proper password hashing)
-    if (user.password !== password) {
+    // ── ROLE CHECK FIRST ──────────────────────────────────────────────────────
+    // Enforce that the selected tab matches the account's actual role.
+    // This prevents a staff/farmer from accidentally landing on admin routes.
+    if (role && user.role !== role) {
+      console.log(`⛔ Role mismatch: account is "${user.role}", login tab selected "${role}"`);
+      return res.render("login", { 
+        title: "iBarangay Login - Agricultural Management System",
+        error: `Wrong login tab. This account is registered as "${user.role}". Please select the correct tab and try again.`
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Check password - support both plain text and bcrypt hashed
+    let passwordMatch = false;
+    if (user.password) {
+      // Check if password is bcrypt hashed (starts with $2b$ or $2a$)
+      if (user.password.startsWith('$2b$') || user.password.startsWith('$2a$')) {
+        const bcrypt = await import('bcrypt');
+        passwordMatch = await bcrypt.default.compare(password, user.password);
+      } else {
+        // Plain text comparison
+        passwordMatch = user.password === password;
+      }
+    }
+
+    if (!passwordMatch) {
       return res.render("login", { 
         title: "iBarangay Login - Agricultural Management System",
         error: "Invalid password. Please try again."
       });
+    }
+
+    // If admin role, log in directly - no approval or status checks needed
+    if (user.role === 'admin') {
+      req.session.userId = user.id;
+      req.session.userRole = 'admin';
+      req.session.userName = user.name;
+      req.session.userBarangay = user.barangay || 'Main Office';
+      req.session.userEmail = user.email;
+      console.log('Admin login successful, redirecting to dashboard');
+      return res.redirect("/dashboard");
     }
 
     // Check if staff is approved by admin FIRST (before status check)
@@ -157,19 +185,46 @@ export const loginUser = async (req, res) => {
       }
     }
 
+    // Check if user is suspended
+    if (user.status === 'suspended') {
+      const suspensionEnd = user.suspensionEnd ? new Date(user.suspensionEnd) : null;
+      const now = new Date();
+      
+      // Check if suspension has expired
+      if (suspensionEnd && now > suspensionEnd) {
+        // Suspension expired, reactivate account
+        try {
+          const { User } = await import('../models/UserMySQL.js');
+          await User.update(user.id, { status: 'active' });
+          console.log(`✅ Suspension expired for ${user.name}, account reactivated`);
+          user.status = 'active'; // Update local object
+        } catch (error) {
+          console.error('Error reactivating account:', error);
+        }
+      } else {
+        // Still suspended
+        const endDateStr = suspensionEnd ? suspensionEnd.toLocaleDateString('en-US', { 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric' 
+        }) : 'indefinitely';
+        
+        const reason = user.suspensionReason || 'No reason provided';
+        
+        console.log(`⏸️ Suspended user login attempt: ${user.name} (${user.email})`);
+        return res.render("login", { 
+          title: "iBarangay Login - Agricultural Management System",
+          error: `Your account has been suspended until ${endDateStr}. Reason: ${reason}. Please contact the administrator for more information.`,
+          success: null
+        });
+      }
+    }
+
     // Check if user is active
     if (user.status && user.status !== 'active') {
       return res.render("login", { 
         title: "iBarangay Login - Agricultural Management System",
         error: "Your account is not active. Please contact administrator."
-      });
-    }
-
-    // Check if the user's role matches the selected role (if specified)
-    if (role && user.role !== role) {
-      return res.render("login", { 
-        title: "iBarangay Login - Agricultural Management System",
-        error: `Access denied. This account is registered as ${user.role}, not ${role}.`
       });
     }
 
@@ -214,7 +269,7 @@ export const listUsers = () => {
 };
 
 export const registerUser = async (req, res) => {
-  const { name, email, password, phone, barangay, role, landArea, landType, staffingManagement } = req.body;
+  const { name, email, password, phone, barangay, role, landArea, landType, staffingManagement, dob } = req.body;
   
   try {
     // Import MySQL User model
@@ -245,8 +300,9 @@ export const registerUser = async (req, res) => {
       id: userId,
       name,
       email,
-      password, // In production, this should be hashed
+      password,
       phone,
+      dob: dob || null,
       role: role || 'farmer',
       barangay,
       status: 'active',
@@ -258,11 +314,11 @@ export const registerUser = async (req, res) => {
     if (role === 'farmer') {
       userData.landArea = parseFloat(landArea);
       userData.landType = landType;
-      userData.approved = true; // Farmers are auto-approved
+      userData.approved = true;
       userData.isApproved = true;
     } else if (role === 'staff') {
-      userData.staffingManagement = staffingManagement;
-      userData.approved = false; // Staff needs admin approval
+      userData.staffingManagement = staffingManagement || 'Agricultural Staff';
+      userData.approved = false;
       userData.isApproved = false;
     }
 
@@ -312,11 +368,25 @@ export const registerUser = async (req, res) => {
       return res.redirect("/dashboard");
     }
 
-    // For staff, show pending approval message
+    // For staff, show pending approval message and store admin notification
     if (role === 'staff') {
+      // Store pending staff notification for admin dashboard
+      if (!global.pendingStaffNotifications) global.pendingStaffNotifications = [];
+      global.pendingStaffNotifications.push({
+        type: 'new_staff_registration',
+        staffId: userId,
+        staffName: name,
+        staffEmail: email,
+        barangay: barangay,
+        dob: dob || null,
+        phone: phone || null,
+        timestamp: new Date().toISOString()
+      });
+      console.log(`🔔 ADMIN NOTIFICATION: New staff registration — ${name} (${email})`);
+
       return res.render("login", { 
         title: "iBarangay Login - Agricultural Management System",
-        success: "Staff account created successfully! Your account is pending admin approval. You will be able to login once approved."
+        success: `Registration submitted! Welcome ${name}. Your account is pending admin approval. You will receive access once an administrator reviews your registration.`
       });
     }
 
@@ -653,67 +723,33 @@ export const deleteUser = (email) => {
 export const getPendingStaff = async (req, res) => {
   try {
     console.log('🔍 API called: /api/admin/pending-staff');
-    console.log('📊 Local users count:', localUsers.size);
-    console.log('📊 Registered users count:', registeredUsers.length);
     
-    // Try MySQL first
-    try {
-      const { User } = await import('../models/UserMySQL.js');
-      const pendingStaff = await User.findPendingStaff();
-      
-      console.log(`✅ Found ${pendingStaff.length} pending staff in MySQL`);
-      if (pendingStaff.length > 0) {
-        console.log('📋 Pending staff:', pendingStaff.map(s => `${s.name} (${s.email})`).join(', '));
-      }
-      
-      res.json({
-        success: true,
-        pendingStaff: pendingStaff.map(staff => ({
-          id: staff.id,
-          name: staff.name,
-          email: staff.email,
-          phone: staff.phone || 'N/A',
-          barangay: staff.barangay,
-          staffingManagement: staff.staffingManagement || 'Agricultural Staff',
-          createdAt: staff.createdAt,
-          status: 'pending'
-        }))
-      });
-    } catch (dbError) {
-      console.log('⚠️ MySQL not available, using local storage');
-      console.log('🔍 DB Error:', dbError.message);
-      
-      // Fallback to local storage
-      const allUsers = Array.from(localUsers.values());
-      console.log('📊 All local users:', allUsers.length);
-      console.log('📊 Staff users:', allUsers.filter(u => u.role === 'staff').length);
-      
-      const pendingStaff = allUsers.filter(
-        user => user.role === 'staff' && (user.approved === false || user.isApproved === false)
-      );
-      
-      console.log(`✅ Found ${pendingStaff.length} pending staff in local storage`);
-      if (pendingStaff.length > 0) {
-        console.log('📋 Pending staff:', pendingStaff.map(s => `${s.name} (${s.email})`).join(', '));
-      }
-      
-      res.json({
-        success: true,
-        pendingStaff: pendingStaff.map(staff => ({
-          id: staff.id,
-          name: staff.name,
-          email: staff.email,
-          phone: staff.phone || 'N/A',
-          barangay: staff.barangay,
-          staffingManagement: staff.staffingManagement || 'Agricultural Staff',
-          createdAt: staff.createdAt,
-          status: 'pending'
-        }))
-      });
+    // Use MySQL only - no local storage fallback
+    const { User } = await import('../models/UserMySQL.js');
+    const pendingStaff = await User.findPendingStaff();
+    
+    console.log(`✅ Found ${pendingStaff.length} pending staff in MySQL`);
+    if (pendingStaff.length > 0) {
+      console.log('📋 Pending staff:', pendingStaff.map(s => `${s.name} (${s.email})`).join(', '));
     }
+    
+    res.json({
+      success: true,
+      pendingStaff: pendingStaff.map(staff => ({
+        id: staff.id,
+        name: staff.name,
+        email: staff.email,
+        phone: staff.phone || 'N/A',
+        barangay: staff.barangay,
+        dob: staff.dob,
+        staffingManagement: staff.staffingManagement || 'Agricultural Staff',
+        createdAt: staff.createdAt,
+        status: 'pending'
+      }))
+    });
   } catch (error) {
     console.error('❌ Error getting pending staff:', error);
-    res.status(500).json({ success: false, error: 'Failed to load pending staff' });
+    res.status(500).json({ success: false, error: 'Failed to load pending staff: ' + error.message });
   }
 };
 
@@ -722,63 +758,44 @@ export const approveStaff = async (req, res) => {
   try {
     const { staffId } = req.params;
     
-    // Try MySQL first
-    try {
-      const { User } = await import('../models/UserMySQL.js');
-      await User.approveStaff(staffId);
-      
-      // Also update local storage if exists
-      for (const [email, user] of localUsers.entries()) {
-        if (user.id === staffId && user.role === 'staff') {
-          user.approved = true;
-          user.isApproved = true;
-          user.status = 'active';
-          localUsers.set(email, user);
-          break;
-        }
-      }
-      
-      console.log(`✅ Staff approved in MySQL: ${staffId} by ${req.session.userName}`);
-      
-      res.json({
-        success: true,
-        message: 'Staff member has been approved and can now login'
-      });
-    } catch (dbError) {
-      console.log('⚠️ MySQL not available, using local storage');
-      // Fallback to local storage
-      let staffToApprove = null;
-      for (const [email, user] of localUsers.entries()) {
-        if (user.id === staffId && user.role === 'staff') {
-          user.approved = true;
-          user.status = 'active';
-          user.approvedAt = new Date();
-          user.approvedBy = req.session.userName || 'Admin';
-          staffToApprove = user;
-          localUsers.set(email, user);
-          break;
-        }
-      }
-      
-      if (!staffToApprove) {
-        return res.status(404).json({ success: false, error: 'Staff member not found' });
-      }
-      
-      console.log(`Staff approved: ${staffToApprove.name} by ${req.session.userName}`);
-      
-      res.json({
-        success: true,
-        message: `${staffToApprove.name} has been approved and can now login`,
-        staff: {
-          id: staffToApprove.id,
-          name: staffToApprove.name,
-          email: staffToApprove.email
-        }
+    console.log(`🔍 Attempting to approve staff with ID: ${staffId}`);
+    
+    // Use MySQL only - no local storage fallback
+    const { User } = await import('../models/UserMySQL.js');
+    
+    // First check if staff exists
+    const staff = await User.findById(staffId);
+    
+    if (!staff) {
+      console.log(`❌ Staff not found in database with ID: ${staffId}`);
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Staff member not found' 
       });
     }
+    
+    if (staff.role !== 'staff') {
+      console.log(`❌ User ${staffId} is not a staff member (role: ${staff.role})`);
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User is not a staff member' 
+      });
+    }
+    
+    console.log(`✅ Found staff: ${staff.name} (${staff.email})`);
+    
+    // Approve in database
+    await User.approveStaff(staffId);
+    
+    console.log(`✅ Staff approved in MySQL: ${staffId} by ${req.session.userName}`);
+    
+    res.json({
+      success: true,
+      message: `${staff.name} has been approved and can now login`
+    });
   } catch (error) {
-    console.error('Error approving staff:', error);
-    res.status(500).json({ success: false, error: 'Failed to approve staff' });
+    console.error('❌ Error approving staff:', error);
+    res.status(500).json({ success: false, error: 'Failed to approve staff: ' + error.message });
   }
 };
 
@@ -842,28 +859,67 @@ export const rejectStaff = async (req, res) => {
 };
 
 // Get all approved staff (for admin view)
-export const getAllStaff = (req, res) => {
+export const getAllStaff = async (req, res) => {
   try {
-    const allStaff = Array.from(localUsers.values()).filter(
-      user => user.role === 'staff'
-    );
+    console.log('📋 API called: /api/admin/all-staff');
     
-    res.json({
-      success: true,
-      staff: allStaff.map(staff => ({
-        id: staff.id,
-        name: staff.name,
-        email: staff.email,
-        barangay: staff.barangay,
-        position: staff.staffingManagement || 'Agricultural Staff',
-        status: staff.approved ? 'approved' : 'pending',
-        registrationDate: staff.createdAt,
-        approvedAt: staff.approvedAt,
-        approvedBy: staff.approvedBy
-      }))
-    });
+    // Try MySQL first
+    try {
+      const { User } = await import('../models/UserMySQL.js');
+      const allStaff = await User.findByRole('staff');
+      
+      // Filter only APPROVED staff (isApproved = 1 or true)
+      const approvedStaff = allStaff.filter(
+        staff => staff.isApproved === true || staff.isApproved === 1 || staff.isApproved === '1'
+      );
+      
+      console.log(`✅ Found ${approvedStaff.length} approved staff in MySQL (out of ${allStaff.length} total staff)`);
+      
+      res.json({
+        success: true,
+        staff: approvedStaff.map(staff => ({
+          id: staff.id,
+          name: staff.name,
+          email: staff.email,
+          phone: staff.phone,
+          barangay: staff.barangay,
+          dob: staff.dob,
+          position: staff.staffingManagement || 'Agricultural Staff',
+          status: 'approved',
+          registrationDate: staff.createdAt,
+          approvedAt: staff.approvedAt,
+          isApproved: staff.isApproved
+        }))
+      });
+    } catch (dbError) {
+      console.log('⚠️ MySQL not available, using local storage');
+      
+      // Fallback to local storage
+      const allStaff = Array.from(localUsers.values()).filter(
+        user => user.role === 'staff' && (user.approved === true || user.isApproved === true || user.isApproved === 1)
+      );
+      
+      console.log(`✅ Found ${allStaff.length} approved staff in local storage`);
+      
+      res.json({
+        success: true,
+        staff: allStaff.map(staff => ({
+          id: staff.id,
+          name: staff.name,
+          email: staff.email,
+          phone: staff.phone,
+          barangay: staff.barangay,
+          dob: staff.dob,
+          position: staff.staffingManagement || 'Agricultural Staff',
+          status: staff.approved ? 'approved' : 'pending',
+          registrationDate: staff.createdAt,
+          approvedAt: staff.approvedAt,
+          approvedBy: staff.approvedBy
+        }))
+      });
+    }
   } catch (error) {
-    console.error('Error getting all staff:', error);
+    console.error('❌ Error getting all staff:', error);
     res.status(500).json({ success: false, error: 'Failed to load staff list' });
   }
 };

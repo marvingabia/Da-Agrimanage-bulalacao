@@ -140,6 +140,12 @@
                                 <i class="fas fa-paper-plane me-2"></i>Send Notifications
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="#" onclick="showSection('admin-report')" id="nav-admin-report">
+                                <i class="fas fa-comment-dots me-2"></i>Admin Report
+                                <span class="badge bg-danger rounded-pill float-end" id="sidebar-admin-messages-count" style="display: none;">0</span>
+                            </a>
+                        </li>
                         {{/if}}
                         
                         <!-- Admin Menu -->
@@ -192,6 +198,16 @@
                                 <span class="badge bg-light text-dark rounded-pill float-end" id="sidebar-announcements-count">0</span>
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="#" onclick="showSection('data-analytics')" id="nav-data-analytics">
+                                <i class="fas fa-chart-line me-2"></i>Data Analytics
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="#" onclick="showSection('send-notifications')" id="nav-send-notifications">
+                                <i class="fas fa-paper-plane me-2"></i>Send Notifications
+                            </a>
+                        </li>
                         {{/if}}
                         
                         <!-- Notifications -->
@@ -236,11 +252,28 @@
                 </div>
             </div>
 
+            <!-- Farmer Registration Toast Container -->
+            <div id="farmer-toast-container" style="position:fixed;top:1.5rem;right:1.5rem;z-index:99999;display:flex;flex-direction:column;gap:0.75rem;max-width:360px;"></div>
+
             <!-- Main Content -->
             <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
                 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
                     <h1 class="h2">Welcome, {{user.name}}</h1>
-                    <div class="badge bg-primary text-uppercase">{{user.role}}</div>
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="badge bg-primary text-uppercase">{{user.role}}</div>
+                        <!-- Profile Picture Avatar -->
+                        <div class="header-avatar-wrapper" onclick="openProfilePicModal()" title="Change Profile Picture">
+                            <div class="header-avatar" id="header-avatar">
+                                {{#if user.profilePicture}}
+                                    <img src="{{user.profilePicture}}" alt="Profile" id="header-avatar-img">
+                                {{else}}
+                                    <span id="header-avatar-initials">{{user.name.[0]}}</span>
+                                    <img src="" alt="Profile" id="header-avatar-img" style="display:none;">
+                                {{/if}}
+                            </div>
+                            <div class="header-avatar-edit"><i class="fas fa-camera"></i></div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Dashboard Section -->
@@ -316,39 +349,100 @@
                         {{/if}}
                         
                         {{#if (eq user.role 'admin')}}
+                        <!-- Admin Stats Cards - Styled -->
+                        <div class="col-12 mb-2">
+                            <div class="admin-dashboard-header">
+                                <h4><i class="fas fa-tachometer-alt me-2"></i>Overview</h4>
+                                <span class="text-muted small">Real-time system statistics</span>
+                            </div>
+                        </div>
                         <div class="col-md-3 mb-4">
-                            <div class="card">
-                                <div class="card-body">
-                                    <h5 class="card-title"><i class="fas fa-users text-primary"></i> Farmers</h5>
-                                    <p class="card-text display-6" id="farmers-count">{{stats.totalFarmers}}</p>
-                                    <p class="text-muted">Registered</p>
+                            <div class="admin-stat-card stat-blue">
+                                <div class="stat-icon"><i class="fas fa-users"></i></div>
+                                <div class="stat-info">
+                                    <div class="stat-number" id="farmers-count">{{stats.totalFarmers}}</div>
+                                    <div class="stat-label">Farmers</div>
+                                    <div class="stat-sub">Registered</div>
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-3 mb-4">
-                            <div class="card">
-                                <div class="card-body">
-                                    <h5 class="card-title"><i class="fas fa-user-tie text-success"></i> Staff</h5>
-                                    <p class="card-text display-6" id="staff-count">{{stats.totalStaff}}</p>
-                                    <p class="text-muted">Active Staff</p>
+                            <div class="admin-stat-card stat-green">
+                                <div class="stat-icon"><i class="fas fa-user-tie"></i></div>
+                                <div class="stat-info">
+                                    <div class="stat-number" id="staff-count">{{stats.totalStaff}}</div>
+                                    <div class="stat-label">Staff</div>
+                                    <div class="stat-sub">Active Staff</div>
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-3 mb-4">
-                            <div class="card">
-                                <div class="card-body">
-                                    <h5 class="card-title"><i class="fas fa-clock text-warning"></i> Pending</h5>
-                                    <p class="card-text display-6" id="pending-count">0</p>
-                                    <p class="text-muted">Staff Approvals</p>
+                            <div class="admin-stat-card stat-orange">
+                                <div class="stat-icon"><i class="fas fa-clock"></i></div>
+                                <div class="stat-info">
+                                    <div class="stat-number" id="pending-count">0</div>
+                                    <div class="stat-label">Pending</div>
+                                    <div class="stat-sub">Staff Approvals</div>
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-3 mb-4">
-                            <div class="card">
-                                <div class="card-body">
-                                    <h5 class="card-title"><i class="fas fa-bullhorn text-info"></i> Announcements</h5>
-                                    <p class="card-text display-6" id="announcements-count">{{stats.activeAnnouncements}}</p>
-                                    <p class="text-muted">Active</p>
+                            <div class="admin-stat-card stat-purple">
+                                <div class="stat-icon"><i class="fas fa-bullhorn"></i></div>
+                                <div class="stat-info">
+                                    <div class="stat-number" id="announcements-count">{{stats.activeAnnouncements}}</div>
+                                    <div class="stat-label">Announcements</div>
+                                    <div class="stat-sub">Active</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Quick Analytics Charts on Dashboard -->
+                        <div class="col-12 mb-2 mt-2">
+                            <div class="admin-dashboard-header">
+                                <h4><i class="fas fa-chart-bar me-2"></i>Quick Analytics</h4>
+                                <button class="btn btn-sm btn-outline-success" onclick="showSection('data-analytics')">
+                                    <i class="fas fa-expand-alt me-1"></i>Full Analytics
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-8 mb-4">
+                            <div class="dashboard-chart-card">
+                                <div class="chart-card-header">
+                                    <h6><i class="fas fa-chart-area me-2 text-primary"></i>Farmers Registration Trend</h6>
+                                </div>
+                                <div class="chart-card-body">
+                                    <canvas id="dash-farmers-chart" height="120"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-4">
+                            <div class="dashboard-chart-card">
+                                <div class="chart-card-header">
+                                    <h6><i class="fas fa-chart-pie me-2 text-success"></i>Insurance Status</h6>
+                                </div>
+                                <div class="chart-card-body">
+                                    <canvas id="dash-insurance-chart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <div class="dashboard-chart-card">
+                                <div class="chart-card-header">
+                                    <h6><i class="fas fa-chart-bar me-2 text-warning"></i>Damage Reports by Type</h6>
+                                </div>
+                                <div class="chart-card-body">
+                                    <canvas id="dash-damage-chart" height="130"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <div class="dashboard-chart-card">
+                                <div class="chart-card-header">
+                                    <h6><i class="fas fa-chart-doughnut me-2 text-danger"></i>Benefits Distribution</h6>
+                                </div>
+                                <div class="chart-card-body">
+                                    <canvas id="dash-benefits-chart"></canvas>
                                 </div>
                             </div>
                         </div>
@@ -391,6 +485,11 @@
                     {{> send-notifications}}
                 </div>
                 
+                <!-- Admin Report Section (Staff Only) -->
+                <div id="admin-report-section" style="display:none;">
+                    {{> admin-report}}
+                </div>
+                
                 <!-- Announcements Section -->
                 <div id="announcements-section" style="display:none;">
                     {{> announcements}}
@@ -410,6 +509,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="/js/mobile-menu.js"></script>
     <script src="/js/auto-refresh-staff.js"></script>
     <script>
@@ -534,6 +634,9 @@
                     } else if (section === 'staff-management' && typeof loadStaffManagement === 'function') {
                         console.log('?? Loading staff management...');
                         loadStaffManagement();
+                    } else if (section === 'admin-report' && typeof loadAdminList === 'function') {
+                        console.log('?? Loading admin report...');
+                        loadAdminList();
                     }
                 }, 100);
             }
@@ -609,6 +712,9 @@
                         }
                     })
                     .catch(error => console.error('Error loading pending staff:', error));
+
+                // Load quick analytics charts for admin dashboard
+                loadDashboardCharts();
             }
             
             // Load inventory count
@@ -967,5 +1073,640 @@
         window.toggleNotifications = toggleNotifications;
         window.checkNotificationCount = checkNotificationCount;
     </script>
+
+    <!-- ═══════════════════════════════════════════════════
+         FARMER REGISTRATION NOTIFICATION SYSTEM
+         Polls every 15 seconds; shows toast + bell badge
+         to admin/staff when a new farmer registers
+    ════════════════════════════════════════════════════ -->
+    <script>
+    (function() {
+        const userRole = '{{user.role}}';
+        if (userRole !== 'admin' && userRole !== 'staff') return; // Only for admin/staff
+
+        // Track the timestamp of the last check so we only show truly NEW farmers
+        let lastCheckedAt = new Date().toISOString();
+
+        // In-memory list of new farmer notifications (for the bell panel)
+        const farmerNotifs = [];
+
+        // ── Toast popup ───────────────────────────────────────
+        function showFarmerToast(farmers) {
+            const container = document.getElementById('farmer-toast-container');
+            if (!container) return;
+
+            farmers.forEach(farmer => {
+                const toast = document.createElement('div');
+                toast.style.cssText = [
+                    'background:#fff',
+                    'border-left:5px solid #22c55e',
+                    'border-radius:12px',
+                    'padding:1rem 1.25rem',
+                    'box-shadow:0 8px 30px rgba(0,0,0,0.15)',
+                    'display:flex',
+                    'align-items:flex-start',
+                    'gap:0.75rem',
+                    'animation:slideInRight 0.4s ease',
+                    'max-width:360px',
+                    'width:100%'
+                ].join(';');
+
+                toast.innerHTML = `
+                    <div style="background:#dcfce7;border-radius:50%;width:40px;height:40px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <i class="fas fa-user-plus" style="color:#16a34a;font-size:1.1rem;"></i>
+                    </div>
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-weight:700;color:#166534;font-size:0.95rem;">🎉 New Farmer Registered!</div>
+                        <div style="font-size:0.87rem;color:#374151;margin-top:0.2rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                            <strong>${farmer.name}</strong> from ${farmer.barangay}
+                        </div>
+                        <div style="font-size:0.78rem;color:#6b7280;margin-top:0.15rem;">${farmer.email}</div>
+                    </div>
+                    <button onclick="this.closest('div[style]').remove()" style="background:none;border:none;color:#9ca3af;cursor:pointer;font-size:1.1rem;padding:0;line-height:1;flex-shrink:0;">&times;</button>
+                `;
+
+                container.appendChild(toast);
+                // Auto-remove after 6 seconds
+                setTimeout(() => toast.remove(), 6000);
+            });
+        }
+
+        // ── Bell panel entry ──────────────────────────────────
+        function addToNotificationPanel(farmers) {
+            farmers.forEach(farmer => {
+                farmerNotifs.unshift({
+                    id: farmer.id,
+                    type: 'announcement',
+                    title: `New Farmer: ${farmer.name}`,
+                    message: `${farmer.name} from ${farmer.barangay} just registered.`,
+                    read: false,
+                    createdAt: new Date(farmer.createdAt)
+                });
+            });
+
+            // Inject into existing notifications array if it exists
+            if (window.notifications && Array.isArray(window.notifications)) {
+                farmerNotifs.forEach(n => {
+                    if (!window.notifications.find(x => x.id === n.id)) {
+                        window.notifications.unshift(n);
+                    }
+                });
+                if (typeof window.displayNotifications === 'function') window.displayNotifications();
+                if (typeof window.updateNotificationBadge === 'function') window.updateNotificationBadge();
+            }
+
+            // Update the badge manually in case the panel JS hasn't loaded yet
+            const badge = document.getElementById('notification-count');
+            if (badge) {
+                const current = parseInt(badge.textContent) || 0;
+                const newCount = current + farmers.length;
+                badge.textContent = newCount;
+                badge.style.display = 'inline-block';
+                badge.classList.add('badge-pulse');
+                setTimeout(() => badge.classList.remove('badge-pulse'), 1500);
+            }
+        }
+
+        // ── Poll for new registrations ────────────────────────
+        async function pollNewFarmers() {
+            try {
+                const sinceParam = encodeURIComponent(lastCheckedAt);
+                const res = await fetch(`/api/farmers/new-registrations?since=${sinceParam}`);
+                if (!res.ok) return;
+
+                const data = await res.json();
+                lastCheckedAt = new Date().toISOString(); // update timestamp
+
+                if (data.success && data.newFarmers && data.newFarmers.length > 0) {
+                    console.log(`🌾 ${data.newFarmers.length} new farmer(s) registered!`, data.newFarmers);
+                    showFarmerToast(data.newFarmers);
+                    addToNotificationPanel(data.newFarmers);
+
+                    // Also update the Farmers count in the sidebar
+                    const sidebarBadge = document.getElementById('sidebar-farmers-count');
+                    if (sidebarBadge) sidebarBadge.textContent = data.total;
+                    const dashCard = document.getElementById('farmers-count');
+                    if (dashCard) dashCard.textContent = data.total;
+                }
+            } catch (err) {
+                // Silent fail — don't spam console
+            }
+        }
+
+        // Add CSS animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideInRight {
+                from { transform: translateX(120%); opacity: 0; }
+                to   { transform: translateX(0);    opacity: 1; }
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Start polling after a short delay (let the page settle), then every 15s
+        setTimeout(pollNewFarmers, 3000);
+        setInterval(pollNewFarmers, 15000);
+
+        // ── Poll for new STAFF registrations (admin only) ─────────────────
+        if (userRole === 'admin') {
+            let knownPendingIds = new Set();
+            let firstStaffPoll = true;
+
+            async function pollNewStaff() {
+                try {
+                    const res = await fetch('/api/admin/pending-staff-count');
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    if (!data.success) return;
+
+                    const currentIds = new Set((data.pendingStaff || []).map(s => s.id));
+
+                    if (!firstStaffPoll) {
+                        // Find truly new ones since last poll
+                        const newStaff = (data.pendingStaff || []).filter(s => !knownPendingIds.has(s.id));
+                        newStaff.forEach(staff => {
+                            // Toast notification
+                            const toast = document.createElement('div');
+                            toast.className = 'login-toast';
+                            toast.style.cssText = 'position:fixed;top:1.5rem;right:1.5rem;z-index:99999;background:#fff;border-left:5px solid #8b5cf6;border-radius:14px;padding:1rem 1.25rem;box-shadow:0 12px 40px rgba(0,0,0,0.18);display:flex;align-items:flex-start;gap:0.75rem;max-width:360px;animation:toastIn 0.45s cubic-bezier(0.34,1.56,0.64,1) both;';
+                            toast.innerHTML = `
+                                <div style="background:#ede9fe;border-radius:50%;width:38px;height:38px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                                    <i class="fas fa-user-clock" style="color:#7c3aed;font-size:1.1rem;"></i>
+                                </div>
+                                <div style="flex:1;">
+                                    <div style="font-weight:700;color:#5b21b6;font-size:0.95rem;">🆕 New Staff Registration!</div>
+                                    <div style="font-size:0.85rem;color:#374151;margin-top:0.2rem;"><strong>${staff.name}</strong> from ${staff.barangay || 'N/A'}</div>
+                                    <div style="font-size:0.78rem;color:#6b7280;">${staff.email} — <em>awaiting your approval</em></div>
+                                </div>
+                                <button onclick="this.closest('div[style]').remove()" style="background:none;border:none;color:#9ca3af;cursor:pointer;font-size:1.2rem;line-height:1;flex-shrink:0;">&times;</button>
+                            `;
+                            document.body.appendChild(toast);
+                            setTimeout(() => { toast.style.animation='toastOut 0.35s ease forwards'; setTimeout(()=>toast.remove(),350); }, 8000);
+
+                            // Update sidebar pending badge
+                            const badge = document.getElementById('notification-count');
+                            if (badge) {
+                                badge.textContent = (parseInt(badge.textContent)||0) + 1;
+                                badge.style.display = 'inline-block';
+                            }
+                        });
+                    }
+
+                    knownPendingIds = currentIds;
+                    firstStaffPoll = false;
+
+                    // Update the pending count card
+                    const pendingEl = document.getElementById('pending-count');
+                    if (pendingEl) pendingEl.textContent = data.count;
+
+                } catch(e) { /* silent */ }
+            }
+
+            setTimeout(pollNewStaff, 5000);
+            setInterval(pollNewStaff, 20000);
+        }
+    })();
+    </script>
+
+    <!-- Profile Picture Modal -->
+    <div id="profilePicModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:9999; align-items:center; justify-content:center;">
+        <div style="background:#fff; border-radius:20px; width:90%; max-width:480px; box-shadow:0 20px 60px rgba(0,0,0,0.3); position:relative; overflow:hidden;">
+            
+            <!-- Header Banner -->
+            <div style="background:linear-gradient(135deg,#4f46e5,#7c3aed); padding:1.5rem 1.5rem 3.5rem; position:relative;">
+                <button onclick="closeProfilePicModal()" style="position:absolute; top:1rem; right:1rem; background:rgba(255,255,255,0.2); border:none; width:32px; height:32px; border-radius:50%; color:white; font-size:1.1rem; cursor:pointer; display:flex; align-items:center; justify-content:center;">&times;</button>
+                <h5 style="color:white; font-weight:700; margin:0; font-size:1.1rem;"><i class="fas fa-id-card me-2"></i>My Profile</h5>
+            </div>
+
+            <!-- Avatar overlapping banner -->
+            <div style="display:flex; justify-content:center; margin-top:-3rem; margin-bottom:0.5rem; position:relative; z-index:2;">
+                <div style="position:relative; cursor:pointer;" onclick="document.getElementById('profilePicInput').click()">
+                    <div id="modal-avatar-preview" style="width:90px; height:90px; border-radius:50%; border:4px solid white; background:linear-gradient(135deg,#4f46e5,#7c3aed); display:flex; align-items:center; justify-content:center; font-size:2rem; font-weight:700; color:white; overflow:hidden; box-shadow:0 8px 25px rgba(0,0,0,0.2);">
+                        <span id="modal-avatar-initials">{{user.name.[0]}}</span>
+                        <img id="modal-avatar-img" src="" style="display:none; width:100%; height:100%; object-fit:cover;" alt="Profile">
+                    </div>
+                    <div style="position:absolute; bottom:2px; right:2px; width:26px; height:26px; background:#4f46e5; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid white;">
+                        <i class="fas fa-camera" style="font-size:0.6rem; color:white;"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Identity Info -->
+            <div style="padding:0 1.5rem 1rem; text-align:center;">
+                <h4 style="font-weight:700; color:#1e293b; margin:0 0 0.25rem;">{{user.name}}</h4>
+                <span style="display:inline-block; background:linear-gradient(135deg,#4f46e5,#7c3aed); color:white; padding:0.25rem 1rem; border-radius:20px; font-size:0.78rem; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">{{user.role}}</span>
+            </div>
+
+            <!-- Info Cards -->
+            <div style="padding:0 1.5rem 1rem;">
+                <div style="background:#f8fafc; border-radius:14px; padding:1rem; display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+                    <div style="background:white; border-radius:10px; padding:0.75rem; box-shadow:0 1px 4px rgba(0,0,0,0.06);">
+                        <div style="font-size:0.72rem; color:#94a3b8; font-weight:600; text-transform:uppercase; margin-bottom:0.25rem;"><i class="fas fa-envelope me-1"></i>Email</div>
+                        <div style="font-size:0.82rem; color:#1e293b; font-weight:600; word-break:break-all;">{{user.email}}</div>
+                    </div>
+                    <div style="background:white; border-radius:10px; padding:0.75rem; box-shadow:0 1px 4px rgba(0,0,0,0.06);">
+                        <div style="font-size:0.72rem; color:#94a3b8; font-weight:600; text-transform:uppercase; margin-bottom:0.25rem;"><i class="fas fa-map-marker-alt me-1"></i>Barangay</div>
+                        <div style="font-size:0.82rem; color:#1e293b; font-weight:600;">{{user.barangay}}</div>
+                    </div>
+                    <div style="background:white; border-radius:10px; padding:0.75rem; box-shadow:0 1px 4px rgba(0,0,0,0.06);">
+                        <div style="font-size:0.72rem; color:#94a3b8; font-weight:600; text-transform:uppercase; margin-bottom:0.25rem;"><i class="fas fa-shield-alt me-1"></i>Status</div>
+                        <div style="font-size:0.82rem; color:#22c55e; font-weight:700;"><i class="fas fa-circle" style="font-size:0.5rem; margin-right:4px;"></i>Active</div>
+                    </div>
+                    <div style="background:white; border-radius:10px; padding:0.75rem; box-shadow:0 1px 4px rgba(0,0,0,0.06);">
+                        <div style="font-size:0.72rem; color:#94a3b8; font-weight:600; text-transform:uppercase; margin-bottom:0.25rem;"><i class="fas fa-id-badge me-1"></i>Role</div>
+                        <div style="font-size:0.82rem; color:#4f46e5; font-weight:700; text-transform:capitalize;">{{user.role}}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upload Area -->
+            <div style="padding:0 1.5rem;">
+                <p style="font-size:0.82rem; color:#64748b; text-align:center; margin-bottom:0.5rem;"><i class="fas fa-camera me-1"></i>Click avatar or drag photo below to change</p>
+                <div id="upload-drop-area" style="border:2px dashed #cbd5e1; border-radius:12px; padding:1rem; text-align:center; cursor:pointer; transition:all 0.3s;" 
+                     onclick="document.getElementById('profilePicInput').click()"
+                     ondragover="event.preventDefault(); this.style.borderColor='#4f46e5'; this.style.background='#f0f0ff';"
+                     ondragleave="this.style.borderColor='#cbd5e1'; this.style.background='';"
+                     ondrop="handleProfilePicDrop(event)">
+                    <i class="fas fa-cloud-upload-alt" style="font-size:1.5rem; color:#94a3b8; margin-bottom:0.25rem; display:block;"></i>
+                    <p style="margin:0; color:#64748b; font-size:0.85rem;">Drag & drop or <strong style="color:#4f46e5;">browse</strong></p>
+                    <p style="margin:0; color:#94a3b8; font-size:0.75rem;">JPG, PNG, GIF — max 2MB</p>
+                </div>
+                <input type="file" id="profilePicInput" accept="image/*" style="display:none;" onchange="previewProfilePic(event)">
+            </div>
+
+            <!-- Action Buttons -->
+            <div style="display:flex; gap:0.75rem; padding:1rem 1.5rem 1.5rem;">
+                <button onclick="saveProfilePicture()" id="save-pic-btn" style="flex:1; background:linear-gradient(135deg,#4f46e5,#7c3aed); color:white; border:none; padding:0.75rem; border-radius:10px; font-weight:600; cursor:pointer; display:none;">
+                    <i class="fas fa-save me-2"></i>Save Photo
+                </button>
+                <button onclick="removeProfilePicture()" id="remove-pic-btn" style="flex:1; background:#fee2e2; color:#ef4444; border:none; padding:0.75rem; border-radius:10px; font-weight:600; cursor:pointer; display:none;">
+                    <i class="fas fa-trash me-2"></i>Remove
+                </button>
+                <button onclick="closeProfilePicModal()" style="flex:1; background:#f1f5f9; color:#64748b; border:none; padding:0.75rem; border-radius:10px; font-weight:600; cursor:pointer;">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dashboard Charts for Admin -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>
+    let dashCharts = {};
+
+    async function loadDashboardCharts() {
+        if ('{{user.role}}' !== 'admin') return;
+        try {
+            const res = await fetch('/api/analytics?period=30');
+            const data = await res.json();
+            if (!data.success) return;
+
+            // Destroy old charts
+            Object.values(dashCharts).forEach(c => c.destroy());
+            dashCharts = {};
+
+            // Farmers Trend
+            const fc = document.getElementById('dash-farmers-chart');
+            if (fc) {
+                dashCharts.farmers = new Chart(fc, {
+                    type: 'line',
+                    data: {
+                        labels: data.charts.farmersLabels || ['Week 1','Week 2','Week 3','Week 4'],
+                        datasets: [{
+                            label: 'Farmers',
+                            data: data.charts.farmersData || [0,0,0,0],
+                            borderColor: '#4f46e5',
+                            backgroundColor: 'rgba(79,70,229,0.12)',
+                            tension: 0.4, fill: true, pointRadius: 4,
+                            pointBackgroundColor: '#4f46e5'
+                        }]
+                    },
+                    options: { responsive: true, plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } },
+                                  x: { grid: { display: false } } } }
+                });
+            }
+
+            // Insurance Status
+            const ic = document.getElementById('dash-insurance-chart');
+            if (ic) {
+                dashCharts.insurance = new Chart(ic, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Approved','Pending','Rejected'],
+                        datasets: [{ data: data.charts.insuranceData || [0,0,0],
+                            backgroundColor: ['#22c55e','#f59e0b','#ef4444'],
+                            borderWidth: 2, borderColor: '#fff' }]
+                    },
+                    options: { responsive: true, cutout: '65%',
+                        plugins: { legend: { position: 'bottom', labels: { padding: 10, font: { size: 11 } } } } }
+                });
+            }
+
+            // Damage Reports
+            const dc = document.getElementById('dash-damage-chart');
+            if (dc) {
+                dashCharts.damage = new Chart(dc, {
+                    type: 'bar',
+                    data: {
+                        labels: data.charts.damageLabels || ['Typhoon','Flood','Drought','Pest'],
+                        datasets: [{ label: 'Reports',
+                            data: data.charts.damageData || [0,0,0,0],
+                            backgroundColor: ['#f87171','#fb923c','#fbbf24','#a78bfa'],
+                            borderRadius: 6 }]
+                    },
+                    options: { responsive: true, indexAxis: 'y',
+                        plugins: { legend: { display: false } },
+                        scales: { x: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } },
+                                  y: { grid: { display: false } } } }
+                });
+            }
+
+            // Benefits
+            const bc = document.getElementById('dash-benefits-chart');
+            if (bc) {
+                dashCharts.benefits = new Chart(bc, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['For Claim','Claimed','Expired'],
+                        datasets: [{ data: [
+                                data.metrics.totalBenefits || 0,
+                                Math.floor((data.metrics.totalBenefits || 0) * 0.6),
+                                Math.floor((data.metrics.totalBenefits || 0) * 0.1)
+                            ],
+                            backgroundColor: ['#3b82f6','#22c55e','#94a3b8'],
+                            borderWidth: 2, borderColor: '#fff' }]
+                    },
+                    options: { responsive: true, cutout: '65%',
+                        plugins: { legend: { position: 'bottom', labels: { padding: 10, font: { size: 11 } } } } }
+                });
+            }
+        } catch(e) {
+            console.error('Dashboard charts error:', e);
+        }
+    }
+    </script>
+
+    <style>
+    /* Admin Stat Cards */
+    .admin-dashboard-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem 0 1rem 0;
+        border-bottom: 2px solid #e2e8f0;
+        margin-bottom: 1rem;
+    }
+    .admin-dashboard-header h4 {
+        margin: 0;
+        color: #1e293b;
+        font-weight: 700;
+        font-size: 1.1rem;
+    }
+    .admin-stat-card {
+        border-radius: 16px;
+        padding: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        transition: transform 0.2s, box-shadow 0.2s;
+        color: white;
+        position: relative;
+        overflow: hidden;
+    }
+    .admin-stat-card::after {
+        content: '';
+        position: absolute;
+        top: -20px; right: -20px;
+        width: 80px; height: 80px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.1);
+    }
+    .admin-stat-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+    }
+    .stat-blue  { background: linear-gradient(135deg, #4f46e5, #7c3aed); }
+    .stat-green { background: linear-gradient(135deg, #059669, #10b981); }
+    .stat-orange{ background: linear-gradient(135deg, #d97706, #f59e0b); }
+    .stat-purple{ background: linear-gradient(135deg, #7c3aed, #a855f7); }
+    .stat-icon {
+        font-size: 2.2rem;
+        opacity: 0.85;
+        min-width: 50px;
+        text-align: center;
+    }
+    .stat-number {
+        font-size: 2.4rem;
+        font-weight: 800;
+        line-height: 1;
+    }
+    .stat-label {
+        font-size: 1rem;
+        font-weight: 600;
+        opacity: 0.95;
+    }
+    .stat-sub {
+        font-size: 0.78rem;
+        opacity: 0.75;
+        margin-top: 2px;
+    }
+    /* Dashboard Chart Cards */
+    .dashboard-chart-card {
+        background: #fff;
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.07);
+        overflow: hidden;
+        height: 100%;
+    }
+    .chart-card-header {
+        padding: 1rem 1.25rem 0.75rem;
+        border-bottom: 1px solid #f1f5f9;
+        background: #fafbfc;
+    }
+    .chart-card-header h6 {
+        margin: 0;
+        font-weight: 700;
+        color: #334155;
+        font-size: 0.9rem;
+    }
+    .chart-card-body {
+        padding: 1.25rem;
+    }
+    </style>
+
+    <!-- Profile Picture Feature -->
+    <script>
+    let selectedProfilePicData = null;
+
+    // Load saved profile picture on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        const saved = localStorage.getItem('profilePic_{{user.id}}');
+        if (saved) {
+            applyProfilePic(saved);
+        }
+    });
+
+    function applyProfilePic(dataUrl) {
+        // Header avatar
+        const img = document.getElementById('header-avatar-img');
+        const initials = document.getElementById('header-avatar-initials');
+        if (img && dataUrl) {
+            img.src = dataUrl;
+            img.style.display = 'block';
+            if (initials) initials.style.display = 'none';
+        }
+        // Modal preview
+        const mImg = document.getElementById('modal-avatar-img');
+        const mInit = document.getElementById('modal-avatar-initials');
+        if (mImg && dataUrl) {
+            mImg.src = dataUrl;
+            mImg.style.display = 'block';
+            if (mInit) mInit.style.display = 'none';
+        }
+    }
+
+    function openProfilePicModal() {
+        const modal = document.getElementById('profilePicModal');
+        modal.style.display = 'flex';
+        // Sync current pic to modal
+        const saved = localStorage.getItem('profilePic_{{user.id}}');
+        if (saved) {
+            applyProfilePic(saved);
+            document.getElementById('remove-pic-btn').style.display = 'block';
+        }
+        selectedProfilePicData = null;
+        document.getElementById('save-pic-btn').style.display = 'none';
+    }
+
+    function closeProfilePicModal() {
+        document.getElementById('profilePicModal').style.display = 'none';
+        selectedProfilePicData = null;
+    }
+
+    function previewProfilePic(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) {
+            alert('File too large. Maximum size is 2MB.');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            selectedProfilePicData = e.target.result;
+            // Show preview in modal
+            const mImg = document.getElementById('modal-avatar-img');
+            const mInit = document.getElementById('modal-avatar-initials');
+            mImg.src = selectedProfilePicData;
+            mImg.style.display = 'block';
+            if (mInit) mInit.style.display = 'none';
+            document.getElementById('save-pic-btn').style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function handleProfilePicDrop(event) {
+        event.preventDefault();
+        const file = event.dataTransfer.files[0];
+        if (!file || !file.type.startsWith('image/')) return;
+        const fakeEvent = { target: { files: [file] } };
+        previewProfilePic(fakeEvent);
+        document.getElementById('upload-drop-area').style.borderColor = '#cbd5e1';
+        document.getElementById('upload-drop-area').style.background = '';
+    }
+
+    function saveProfilePicture() {
+        if (!selectedProfilePicData) return;
+        localStorage.setItem('profilePic_{{user.id}}', selectedProfilePicData);
+        applyProfilePic(selectedProfilePicData);
+        document.getElementById('remove-pic-btn').style.display = 'block';
+        document.getElementById('save-pic-btn').style.display = 'none';
+        closeProfilePicModal();
+        // Show success toast
+        showProfileToast('Profile picture updated!', 'success');
+    }
+
+    function removeProfilePicture() {
+        localStorage.removeItem('profilePic_{{user.id}}');
+        // Reset header
+        const img = document.getElementById('header-avatar-img');
+        const initials = document.getElementById('header-avatar-initials');
+        if (img) { img.src = ''; img.style.display = 'none'; }
+        if (initials) initials.style.display = 'flex';
+        // Reset modal
+        const mImg = document.getElementById('modal-avatar-img');
+        const mInit = document.getElementById('modal-avatar-initials');
+        if (mImg) { mImg.src = ''; mImg.style.display = 'none'; }
+        if (mInit) mInit.style.display = 'flex';
+        document.getElementById('remove-pic-btn').style.display = 'none';
+        closeProfilePicModal();
+        showProfileToast('Profile picture removed.', 'info');
+    }
+
+    function showProfileToast(msg, type) {
+        const toast = document.createElement('div');
+        toast.style.cssText = `position:fixed; bottom:2rem; right:2rem; background:${type==='success'?'#22c55e':'#3b82f6'}; color:white; padding:0.875rem 1.5rem; border-radius:12px; font-weight:600; z-index:99999; box-shadow:0 8px 25px rgba(0,0,0,0.2); animation:slideInRight 0.3s ease;`;
+        toast.innerHTML = `<i class="fas fa-${type==='success'?'check':'info'}-circle me-2"></i>${msg}`;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+    }
+
+    // Close modal on backdrop click
+    document.getElementById('profilePicModal').addEventListener('click', function(e) {
+        if (e.target === this) closeProfilePicModal();
+    });
+    </script>
+
+    <style>
+    /* Header Avatar */
+    .header-avatar-wrapper {
+        position: relative;
+        cursor: pointer;
+    }
+    .header-avatar {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #4f46e5, #7c3aed);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: white;
+        overflow: hidden;
+        border: 2px solid rgba(255,255,255,0.3);
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .header-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .header-avatar-wrapper:hover .header-avatar {
+        transform: scale(1.08);
+        box-shadow: 0 4px 15px rgba(79,70,229,0.4);
+    }
+    .header-avatar-edit {
+        position: absolute;
+        bottom: -2px;
+        right: -2px;
+        width: 18px;
+        height: 18px;
+        background: #4f46e5;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.55rem;
+        color: white;
+        border: 2px solid white;
+    }
+    @keyframes slideInRight {
+        from { transform: translateX(100px); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+    </style>
 </body>
 </html>

@@ -355,11 +355,22 @@ function displayFarmers(farmers) {
                     ? '<span class="badge bg-danger"><i class="fab fa-google me-1"></i>Google</span>'
                     : '<span class="badge bg-primary"><i class="fas fa-envelope me-1"></i>Email</span>'}
             </td>
-            <td>${new Date(farmer.createdAt).toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric'
-            })}</td>
+            <td>
+                <div style="font-size: 0.9rem;">
+                    ${new Date(farmer.createdAt).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                    })}
+                </div>
+                <small style="color: #6b7280;">
+                    ${new Date(farmer.createdAt).toLocaleTimeString('en-US', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: true
+                    })}
+                </small>
+            </td>
             <td>
                 ${farmer.isApproved !== false 
                     ? '<span class="badge-status approved"><i class="fas fa-check-circle me-1"></i>Active</span>'
@@ -369,6 +380,9 @@ function displayFarmers(farmers) {
                 <div class="btn-group btn-group-sm" role="group">
                     <button class="btn-action view" onclick="viewFarmer('${farmer.id}')" title="View ${farmer.name}">
                         <i class="fas fa-eye"></i> View
+                    </button>
+                    <button class="btn-action delete" onclick="deleteFarmer('${farmer.id}')" title="Delete ${farmer.name}" style="background:linear-gradient(135deg,#ef4444,#dc2626); color:white; border:none; padding:0.4rem 0.9rem; border-radius:6px; font-weight:600; font-size:0.82rem; cursor:pointer; margin-left:0.4rem; transition:all 0.2s;">
+                        <i class="fas fa-trash"></i> Delete
                     </button>
                 </div>
             </td>
@@ -391,6 +405,42 @@ function filterFarmers() {
     });
     
     displayFarmers(filteredFarmers);
+}
+
+function deleteFarmer(farmerId) {
+    const farmer = allFarmers.find(f => f.id === farmerId);
+    const farmerName = farmer ? farmer.name : 'this farmer';
+
+    if (!confirm(`⚠️ Delete Farmer\n\nAre you sure you want to permanently delete "${farmerName}"?\n\nThis will also remove all their records.\nThis action cannot be undone.`)) return;
+
+    fetch('/api/admin/delete-farmer/' + farmerId, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(res => {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+    })
+    .then(result => {
+        if (result.success) {
+            // Remove from local arrays and re-render instantly
+            allFarmers = allFarmers.filter(f => f.id !== farmerId);
+            filteredFarmers = filteredFarmers.filter(f => f.id !== farmerId);
+            displayFarmers(filteredFarmers);
+            // Show success toast
+            const toast = document.createElement('div');
+            toast.style.cssText = 'position:fixed;bottom:2rem;right:2rem;background:#22c55e;color:white;padding:0.875rem 1.5rem;border-radius:12px;font-weight:600;z-index:99999;box-shadow:0 8px 25px rgba(0,0,0,0.2);';
+            toast.innerHTML = `<i class="fas fa-check-circle me-2"></i>${farmerName} deleted successfully.`;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        } else {
+            alert('Error: ' + (result.error || 'Failed to delete farmer'));
+        }
+    })
+    .catch(err => {
+        console.error('Delete farmer error:', err);
+        alert('Delete failed: ' + err.message);
+    });
 }
 
 async function viewFarmer(farmerId) {
@@ -425,7 +475,15 @@ async function viewFarmer(farmerId) {
                 <div class="col-md-6"><strong>Email:</strong> ${farmer.email}</div>
                 <div class="col-md-6"><strong>Barangay:</strong> ${farmer.barangay || 'N/A'}</div>
                 <div class="col-md-6"><strong>Auth Provider:</strong> ${farmer.authProvider}</div>
-                <div class="col-md-6"><strong>Registration Date:</strong> ${new Date(farmer.createdAt).toLocaleDateString()}</div>
+                <div class="col-md-6"><strong>Registration Date:</strong> ${new Date(farmer.createdAt).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                })} at ${new Date(farmer.createdAt).toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: true
+                })}</div>
             </div>
             <hr>
             <h6 class="text-success mb-3">Activity Summary</h6>

@@ -32,19 +32,26 @@ export const getAllStaff = async (req, res) => {
         // Get all staff from MySQL
         const allStaff = await User.findByRole('staff');
         
-        // Filter for approved staff only
+        console.log(`📊 Total staff in database: ${allStaff.length}`);
+        console.log(`📊 Staff approval status:`, allStaff.map(s => `${s.name}: ${s.isApproved}`).join(', '));
+        
+        // Filter for approved staff only (check for true, 1, or "1")
         const approvedStaff = allStaff
-            .filter(user => user.isApproved === true)
+            .filter(user => user.isApproved === true || user.isApproved === 1 || user.isApproved === '1')
             .map(user => ({
                 id: user.id,
                 name: user.name,
                 email: user.email,
                 phone: user.phone || 'N/A',
                 barangay: user.barangay || 'N/A',
+                dob: user.dob,
+                approvedAt: user.approvedAt,
                 staffingManagement: user.staffingManagement || 'N/A',
                 createdAt: user.createdAt,
-                approved: user.isApproved
+                isApproved: user.isApproved
             }));
+        
+        console.log(`✅ Approved staff count: ${approvedStaff.length}`);
         
         res.json({ 
             success: true,
@@ -696,3 +703,88 @@ export const endStaffDuty = async (req, res) => {
         res.status(500).json({ error: 'Failed to end staff duty' });
     }
 };
+
+// Suspend staff member with duration
+export const suspendStaff = async (req, res) => {
+    try {
+        const { staffId } = req.params;
+        const { duration, unit, reason } = req.body;
+
+        console.log('🔍 Suspend staff request:', { staffId, duration, unit, reason });
+
+        // Import User model from MySQL
+        const { User } = await import('../models/UserMySQL.js');
+
+        // Find the staff member by ID in MySQL
+        const staff = await User.findById(staffId);
+
+        console.log('👤 Staff found:', staff ? `${staff.name} (${staff.email})` : 'NOT FOUND');
+
+        if (!staff || staff.role !== 'staff') {
+            console.log('❌ Staff validation failed:', { found: !!staff, role: staff?.role });
+            return res.status(404).json({ success: false, error: 'Staff member not found' });
+        }
+
+        // Calculate suspension end date
+        const suspensionStart = new Date();
+        const suspensionEnd = new Date();
+
+        if (unit === 'days') {
+            suspensionEnd.setDate(suspensionEnd.getDate() + duration);
+        } else if (unit === 'weeks') {
+            suspensionEnd.setDate(suspensionEnd.getDate() + (duration * 7));
+        } else if (unit === 'months') {
+            suspensionEnd.setMonth(suspensionEnd.getMonth() + duration);
+        }
+
+        console.log('📅 Suspension dates:', {
+            start: suspensionStart.toISOString(),
+            end: suspensionEnd.toISOString()
+        });
+
+        // Update staff status in MySQL
+        const suspensionData = {
+            status: 'suspended',
+            suspensionStart: suspensionStart,
+            suspensionEnd: suspensionEnd,
+            suspensionDuration: duration,
+            suspensionUnit: unit,
+            suspensionReason: reason || 'No reason provided',
+            suspendedBy: req.session.userId,
+            suspendedByName: req.session.userName || 'Admin'
+        };
+
+        console.log('💾 Attempting to update database with:', suspensionData);
+
+        await User.suspendStaff(staffId, suspensionData);
+
+        console.log(`⏸️ Staff suspended: ${staff.name} (${staff.email}) for ${duration} ${unit}`);
+        console.log(`   Suspension ends: ${suspensionEnd.toISOString()}`);
+        console.log(`   Reason: ${reason || 'No reason provided'}`);
+
+        res.json({
+            success: true,
+            message: `${staff.name} has been suspended for ${duration} ${unit}.`,
+            staff: {
+                id: staff.id,
+                name: staff.name,
+                email: staff.email,
+                status: 'suspended',
+                suspensionEnd: suspensionEnd
+            }
+        });
+    } catch (error) {
+        console.error('❌ Error suspending staff:', error);
+        console.error('❌ Error details:', {
+            message: error.message,
+            code: error.code,
+            sqlMessage: error.sqlMessage,
+            sql: error.sql
+        });
+        res.status(500).json({
+            success: false,
+            error: 'Failed to suspend staff',
+            details: error.message
+        });
+    }
+}

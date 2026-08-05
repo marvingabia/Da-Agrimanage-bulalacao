@@ -161,25 +161,28 @@ export const submitDamageReport = async (req, res) => {
             });
         }
 
-        // Verify user exists in database
+        // Verify user exists in database — save them if missing (prevents FK error)
         try {
             const { User } = await import('../models/UserMySQL.js');
             let farmer = await User.findById(farmerId);
             
             if (!farmer) {
-                console.log(`⚠️ Farmer ${farmerId} not found in MySQL, saving from session...`);
-                const { localUsers } = await import('./authController.js');
-                const localFarmer = localUsers.get(farmerEmail);
-                
-                if (localFarmer) {
-                    console.log(`📝 Saving farmer to MySQL before damage report`);
-                    const newUser = new User(localFarmer);
-                    await newUser.save();
-                    console.log(`✅ Farmer saved successfully`);
-                }
+                console.log(`⚠️ Farmer ${farmerId} not found in MySQL, auto-saving from session...`);
+                const newUser = new User({
+                    id: farmerId,
+                    name: req.session.userName || farmerName || 'Unknown',
+                    email: req.session.userEmail || '',
+                    role: 'farmer',
+                    barangay: req.session.userBarangay || barangay || '',
+                    status: 'active',
+                    isApproved: true,
+                    authProvider: 'email'
+                });
+                await newUser.save();
+                console.log(`✅ Farmer auto-saved to MySQL before damage report`);
             }
         } catch (dbError) {
-            console.error('⚠️ Error verifying farmer:', dbError.message);
+            console.error('⚠️ Error verifying/saving farmer:', dbError.message);
         }
 
         const damageReportData = {
@@ -198,6 +201,7 @@ export const submitDamageReport = async (req, res) => {
             estimatedLoss: parseFloat(estimatedLoss) || 0,
             damageDescription: damageDescription || '',
             additionalNotes: additionalNotes || '',
+            evidenceImages: req.body.evidenceImages || null,
             status: 'pending',
             verificationNotes: null,
             verifiedBy: null,

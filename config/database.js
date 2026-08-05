@@ -74,9 +74,20 @@ async function createTables() {
                 password VARCHAR(255),
                 role ENUM('farmer', 'staff', 'admin') NOT NULL,
                 barangay VARCHAR(255),
-                authProvider ENUM('email', 'google') DEFAULT 'email',
+                phone VARCHAR(20),
+                dob DATE NULL,
+                staffingManagement VARCHAR(255),
+                authProvider VARCHAR(50) DEFAULT 'email',
                 googleId VARCHAR(255),
                 isApproved BOOLEAN DEFAULT FALSE,
+                status VARCHAR(50) DEFAULT 'active',
+                suspensionStart TIMESTAMP NULL,
+                suspensionEnd TIMESTAMP NULL,
+                suspensionDuration INT,
+                suspensionUnit VARCHAR(20),
+                suspensionReason TEXT,
+                suspendedBy VARCHAR(255),
+                suspendedByName VARCHAR(255),
                 createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 INDEX idx_email (email),
@@ -84,6 +95,43 @@ async function createTables() {
                 INDEX idx_barangay (barangay),
                 INDEX idx_googleId (googleId)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+
+        // ── Auto-migrate: add missing columns if the table already existed ──
+        const columnMigrations = [
+            { name: 'status',            def: "VARCHAR(50) DEFAULT 'active'" },
+            { name: 'suspensionStart',   def: 'TIMESTAMP NULL' },
+            { name: 'suspensionEnd',     def: 'TIMESTAMP NULL' },
+            { name: 'suspensionDuration',def: 'INT' },
+            { name: 'suspensionUnit',    def: 'VARCHAR(20)' },
+            { name: 'suspensionReason',  def: 'TEXT' },
+            { name: 'suspendedBy',       def: 'VARCHAR(255)' },
+            { name: 'suspendedByName',   def: 'VARCHAR(255)' },
+            { name: 'googleId',          def: 'VARCHAR(255)' },
+        ];
+
+        const [cols] = await pool.query(
+            `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'`
+        );
+        const existingCols = new Set(cols.map(c => c.COLUMN_NAME));
+
+        for (const col of columnMigrations) {
+            if (!existingCols.has(col.name)) {
+                try {
+                    await pool.query(`ALTER TABLE users ADD COLUMN \`${col.name}\` ${col.def}`);
+                    console.log(`✅ Migrated: added column users.${col.name}`);
+                } catch (e) {
+                    console.warn(`⚠️ Migration skipped for ${col.name}:`, e.message);
+                }
+            }
+        }
+        console.log('✅ Users table columns verified/migrated');
+
+        // Ensure default admin exists
+        await pool.query(`
+            INSERT IGNORE INTO users (id, name, email, password, role, barangay, authProvider, isApproved, createdAt)
+            VALUES ('admin-001', 'System Administrator', 'mj@gmail.com', 'admin2025', 'admin', 'Main Office', 'email', 1, NOW())
         `);
 
         // Insurance Table
@@ -137,6 +185,7 @@ async function createTables() {
                 estimatedLoss DECIMAL(12,2),
                 damageDescription TEXT NOT NULL,
                 additionalNotes TEXT,
+                evidenceImages LONGTEXT,
                 status ENUM('pending', 'verified', 'rejected') DEFAULT 'pending',
                 verificationNotes TEXT,
                 verifiedBy VARCHAR(255),
@@ -315,6 +364,28 @@ async function createTables() {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         `);
 
+        // Messages Table (Admin-Staff Communication)
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS messages (
+                id VARCHAR(100) PRIMARY KEY,
+                senderId VARCHAR(100) NOT NULL,
+                senderName VARCHAR(255) NOT NULL,
+                senderRole ENUM('admin', 'staff') NOT NULL,
+                receiverId VARCHAR(100) NOT NULL,
+                receiverName VARCHAR(255) NOT NULL,
+                receiverRole ENUM('admin', 'staff') NOT NULL,
+                message TEXT NOT NULL,
+                isRead TINYINT(1) DEFAULT 0,
+                readAt DATETIME NULL,
+                createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_sender (senderId),
+                INDEX idx_receiver (receiverId),
+                INDEX idx_created (createdAt),
+                INDEX idx_read (isRead)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+
         console.log('✅ All database tables created successfully!');
     } catch (error) {
         console.error('❌ Error creating tables:', error.message);
@@ -323,10 +394,11 @@ async function createTables() {
 }
 
 export function getPool() {
-    if (!pool) {
-        throw new Error('Database pool not initialized. Call initDatabase() first.');
-    }
-    return pool;
+    return pool || null;
+}
+
+export function isPoolReady() {
+    return pool !== null && pool !== undefined;
 }
 
 export default { initDatabase, getPool };

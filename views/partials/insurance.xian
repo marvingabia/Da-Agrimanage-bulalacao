@@ -88,7 +88,7 @@
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Contact Number *</label>
-                            <input type="tel" class="form-control" name="contactNumber" placeholder="09xxxxxxxxx" required>
+                            <input type="tel" class="form-control" name="contactNumber" value="{{user.phone}}" placeholder="09xxxxxxxxx" required>
                         </div>
                     </div>
                     
@@ -256,7 +256,9 @@ window.addEventListener('beforeunload', function() {
 });
 
 function loadInsurance() {
-    fetch('/api/insurance')
+    const userRole = document.body.getAttribute('data-user-role') || window.USER_ROLE || 'farmer';
+    const endpoint = userRole === 'farmer' ? '/api/farmer/insurance' : '/api/insurance';
+    fetch(endpoint)
         .then(response => response.json())
         .then(data => {
             const tbody = document.getElementById('insurance-table');

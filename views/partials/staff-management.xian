@@ -238,7 +238,7 @@
                         <th>Email</th>
                         <th>Phone</th>
                         <th>Barangay</th>
-                        <th>Staffing Management</th>
+                        <th>Date of Birth</th>
                         <th>Registration Date</th>
                         <th>Actions</th>
                     </tr>
@@ -273,7 +273,7 @@
                         <th>Email</th>
                         <th>Phone</th>
                         <th>Barangay</th>
-                        <th>Staffing Management</th>
+                        <th>Date of Birth</th>
                         <th>Approved Date</th>
                         <th>Status</th>
                         <th>Actions</th>
@@ -323,6 +323,13 @@ document.addEventListener('DOMContentLoaded', function() {
     loadApprovedStaff();
 });
 
+// Global function to reload staff management (called from dashboard)
+window.loadStaffManagement = function() {
+    console.log('📋 Loading Staff Management section...');
+    loadPendingStaff();
+    loadApprovedStaff();
+};
+
 function loadPendingStaff() {
     console.log('📋 Loading pending staff...');
     
@@ -354,7 +361,7 @@ function loadPendingStaff() {
                         <td>${staff.email}</td>
                         <td>${staff.phone || 'N/A'}</td>
                         <td>${staff.barangay || 'N/A'}</td>
-                        <td><span class="staff-badge badge-info">${staff.staffingManagement || 'N/A'}</span></td>
+                        <td>${staff.dob ? new Date(staff.dob).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}</td>
                         <td>${new Date(staff.createdAt).toLocaleDateString('en-US', { 
                             year: 'numeric', 
                             month: 'short', 
@@ -363,10 +370,10 @@ function loadPendingStaff() {
                             minute: '2-digit'
                         })}</td>
                         <td>
-                            <button class="staff-action-btn btn-success" onclick="approveStaff('${staff.id}', '${staff.name}')" title="Approve ${staff.name}">
+                            <button class="staff-action-btn btn-success" onclick="approveStaff(event, '${staff.id}', '${staff.name}')" title="Approve ${staff.name}">
                                 <i class="fas fa-check me-1"></i>Approve
                             </button>
-                            <button class="staff-action-btn btn-danger ms-1" onclick="rejectStaff('${staff.id}', '${staff.name}')" title="Reject ${staff.name}">
+                            <button class="staff-action-btn btn-danger ms-1" onclick="rejectStaff(event, '${staff.id}', '${staff.name}')" title="Reject ${staff.name}">
                                 <i class="fas fa-times me-1"></i>Reject
                             </button>
                         </td>
@@ -422,7 +429,7 @@ function loadApprovedStaff() {
             
             if (data.success && data.staff && data.staff.length > 0) {
                 console.log(`✅ Found ${data.staff.length} approved staff members`);
-                console.log('👥 Staff list:', data.staff.map(s => s.name).join(', '));
+                console.log('👥 Staff list:', data.staff.map(s => `${s.name} (approved: ${s.isApproved})`).join(', '));
                 
                 tbody.innerHTML = data.staff.map(staff => `
                     <tr class="animate-fade-in">
@@ -430,19 +437,35 @@ function loadApprovedStaff() {
                         <td>${staff.email}</td>
                         <td>${staff.phone || 'N/A'}</td>
                         <td>${staff.barangay || 'N/A'}</td>
-                        <td><span class="staff-badge badge-info">${staff.staffingManagement || 'N/A'}</span></td>
-                        <td>${new Date(staff.createdAt).toLocaleDateString('en-US', { 
-                            year: 'numeric', 
-                            month: 'short', 
-                            day: 'numeric'
-                        })}</td>
+                        <td>${staff.dob ? new Date(staff.dob).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}</td>
+                        <td>
+                            ${staff.approvedAt ? `
+                                <div style="font-size: 0.9rem;">
+                                    ${new Date(staff.approvedAt).toLocaleDateString('en-US', { 
+                                        year: 'numeric', 
+                                        month: 'short', 
+                                        day: 'numeric'
+                                    })}
+                                </div>
+                                <small style="color: #6b7280;">
+                                    ${new Date(staff.approvedAt).toLocaleTimeString('en-US', {
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        hour12: true
+                                    })}
+                                </small>
+                            ` : '<span style="color: #6b7280;">Just now</span>'}
+                        </td>
                         <td><span class="badge bg-success">Active</span></td>
                         <td>
                             <button class="staff-action-btn btn-info" onclick="viewStaff('${staff.id}')">
                                 <i class="fas fa-eye me-1"></i>View
                             </button>
-                            <button class="staff-action-btn btn-warning ms-1" onclick="suspendStaff('${staff.id}')">
-                                <i class="fas fa-ban me-1"></i>Suspend
+                            <button class="staff-action-btn btn-primary ms-1" onclick="openChatWithStaff('${staff.id}', '${staff.name}')">
+                                <i class="fas fa-comment me-1"></i>Message
+                            </button>
+                            <button class="staff-action-btn btn-danger ms-1" onclick="deleteStaff('${staff.id}', '${staff.name}')">
+                                <i class="fas fa-trash me-1"></i>Delete
                             </button>
                         </td>
                     </tr>
@@ -467,10 +490,36 @@ function loadApprovedStaff() {
         });
 }
 
-function approveStaff(staffId, staffName) {
+function approveStaff(event, staffId, staffName) {
     if (confirm(`Approve ${staffName}?\n\nThey will be able to login and access the system.`)) {
         console.log(`🔄 Approving staff: ${staffName} (${staffId})`);
         
+        // Find the row to remove IMMEDIATELY
+        const pendingRow = event.target.closest('tr');
+        
+        if (pendingRow) {
+            // INSTANT removal with fade animation
+            pendingRow.style.opacity = '0';
+            pendingRow.style.transition = 'opacity 0.3s ease';
+            
+            // Remove from DOM after animation
+            setTimeout(() => {
+                pendingRow.remove();
+                
+                // Check if pending table is now empty
+                const tbody = document.getElementById('pending-staff-table');
+                if (tbody && tbody.children.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="staff-empty-state"><i class="fas fa-user-clock"></i><p class="mb-0">No pending staff registrations</p><small>New staff will appear here automatically</small></td></tr>';
+                    updateStaffBadge(0);
+                    document.getElementById('pending-count-badge').textContent = '0 Pending';
+                }
+            }, 300);
+        }
+        
+        // Show success message immediately
+        showNotification('success', `✅ ${staffName} approved successfully!`);
+        
+        // Send approval request to backend (in background)
         fetch('/api/admin/approve-staff/' + staffId, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
@@ -478,32 +527,59 @@ function approveStaff(staffId, staffName) {
         .then(response => response.json())
         .then(result => {
             if (result.success) {
-                console.log(`✅ Staff approved: ${staffName}`);
+                console.log(`✅ Staff approved in database: ${staffName}`);
                 
-                // Show success message
-                showNotification('success', `✅ ${staffName} approved successfully!`);
-                
-                // Force immediate reload of both tables
-                console.log('🔄 Reloading staff lists...');
+                // Reload approved staff table to show the new staff
                 setTimeout(() => {
-                    loadPendingStaff();
                     loadApprovedStaff();
-                }, 500); // Small delay to ensure database is updated
+                }, 500);
             } else {
                 console.error('❌ Approval failed:', result.error);
                 showNotification('error', 'Error: ' + (result.error || 'Failed to approve'));
+                // Reload pending table to restore the staff if approval failed
+                loadPendingStaff();
             }
         })
         .catch(error => {
             console.error('❌ Error approving staff:', error);
             showNotification('error', 'Error approving staff member');
+            // Reload pending table to restore the staff if approval failed
+            loadPendingStaff();
         });
     }
 }
 
-function rejectStaff(staffId, staffName) {
+function rejectStaff(event, staffId, staffName) {
     const reason = prompt(`Reject ${staffName}?\n\nPlease enter reason for rejection:`);
     if (reason && reason.trim()) {
+        console.log(`🔄 Rejecting staff: ${staffName} (${staffId})`);
+        
+        // Find the row to remove IMMEDIATELY
+        const pendingRow = event.target.closest('tr');
+        
+        if (pendingRow) {
+            // INSTANT removal with fade animation
+            pendingRow.style.opacity = '0';
+            pendingRow.style.transition = 'opacity 0.3s ease';
+            
+            // Remove from DOM after animation
+            setTimeout(() => {
+                pendingRow.remove();
+                
+                // Check if pending table is now empty
+                const tbody = document.getElementById('pending-staff-table');
+                if (tbody && tbody.children.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="staff-empty-state"><i class="fas fa-user-clock"></i><p class="mb-0">No pending staff registrations</p><small>New staff will appear here automatically</small></td></tr>';
+                    updateStaffBadge(0);
+                    document.getElementById('pending-count-badge').textContent = '0 Pending';
+                }
+            }, 300);
+        }
+        
+        // Show notification immediately
+        showNotification('info', `❌ ${staffName}'s registration rejected`);
+        
+        // Send rejection request to backend (in background)
         fetch('/api/admin/reject-staff/' + staffId, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -512,15 +588,18 @@ function rejectStaff(staffId, staffName) {
         .then(response => response.json())
         .then(result => {
             if (result.success) {
-                showNotification('info', `❌ ${staffName}'s registration rejected`);
-                loadPendingStaff();
+                console.log(`✅ Staff rejected in database: ${staffName}`);
             } else {
                 showNotification('error', 'Error: ' + (result.error || 'Failed to reject'));
+                // Reload pending table to restore the staff if rejection failed
+                loadPendingStaff();
             }
         })
         .catch(error => {
-            console.error('Error:', error);
+            console.error('❌ Error rejecting staff:', error);
             showNotification('error', 'Error rejecting staff member');
+            // Reload pending table to restore the staff if rejection failed
+            loadPendingStaff();
         });
     }
 }
@@ -529,25 +608,231 @@ function viewStaff(staffId) {
     alert('View staff details for: ' + staffId);
 }
 
-function suspendStaff(staffId) {
-    if (confirm('Are you sure you want to suspend this staff member? They will not be able to login.')) {
-        fetch('/api/admin/suspend-staff/' + staffId, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        })
+function deleteStaff(staffId, staffName) {
+    if (!confirm(`⚠️ Delete Staff Member\n\nAre you sure you want to permanently delete "${staffName}"?\n\nThis action cannot be undone.`)) return;
+
+    fetch('/api/admin/delete-staff/' + staffId, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            showNotification('success', `🗑️ ${staffName} has been deleted.`);
+            loadApprovedStaff();
+        } else {
+            showNotification('error', 'Error: ' + (result.error || 'Failed to delete'));
+        }
+    })
+    .catch(error => {
+        console.error('❌ Error deleting staff:', error);
+        showNotification('error', 'Error deleting staff member');
+    });
+}
+
+</script>
+
+
+<!-- Chat Modal for Admin-Staff Communication -->
+<div class="modal fade" id="chatModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-comments me-2"></i>
+                    Chat with <span id="chatStaffName"></span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="chat-container" style="height: 400px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 8px; padding: 1rem; background: #f8f9fa;">
+                    <div id="chatMessages">
+                        <div class="text-center text-muted py-5">
+                            <i class="fas fa-comments fa-3x mb-3"></i>
+                            <p>No messages yet. Start the conversation!</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="chat-input mt-3">
+                    <div class="input-group">
+                        <textarea class="form-control" id="chatMessageInput" rows="2" placeholder="Type your message..."></textarea>
+                        <button class="btn btn-primary" onclick="sendMessage()">
+                            <i class="fas fa-paper-plane me-1"></i>Send
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.chat-message {
+    margin-bottom: 1rem;
+    display: flex;
+    flex-direction: column;
+}
+
+.chat-message.sent {
+    align-items: flex-end;
+}
+
+.chat-message.received {
+    align-items: flex-start;
+}
+
+.chat-bubble {
+    max-width: 70%;
+    padding: 0.75rem 1rem;
+    border-radius: 12px;
+    word-wrap: break-word;
+}
+
+.chat-message.sent .chat-bubble {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.chat-message.received .chat-bubble {
+    background: white;
+    border: 1px solid #e0e0e0;
+    color: #333;
+}
+
+.chat-time {
+    font-size: 0.75rem;
+    color: #6b7280;
+    margin-top: 0.25rem;
+}
+
+.chat-sender {
+    font-weight: 600;
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+    color: #4b5563;
+}
+</style>
+
+<script>
+let currentChatStaffId = null;
+let currentChatStaffName = null;
+let chatRefreshInterval = null;
+
+function openChatWithStaff(staffId, staffName) {
+    currentChatStaffId = staffId;
+    currentChatStaffName = staffName;
+    
+    document.getElementById('chatStaffName').textContent = staffName;
+    
+    // Load existing messages
+    loadChatMessages();
+    
+    // Start auto-refresh
+    if (chatRefreshInterval) clearInterval(chatRefreshInterval);
+    chatRefreshInterval = setInterval(loadChatMessages, 3000);
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('chatModal'));
+    modal.show();
+    
+    // Clear interval when modal closes
+    document.getElementById('chatModal').addEventListener('hidden.bs.modal', function() {
+        if (chatRefreshInterval) {
+            clearInterval(chatRefreshInterval);
+            chatRefreshInterval = null;
+        }
+    });
+}
+
+function loadChatMessages() {
+    if (!currentChatStaffId) return;
+    
+    fetch(`/api/messages/conversation/${currentChatStaffId}`)
         .then(response => response.json())
-        .then(result => {
-            if (result.success) {
-                alert('Staff member suspended successfully');
-                loadApprovedStaff();
-            } else {
-                alert('Error: ' + (result.error || 'Failed to suspend'));
+        .then(data => {
+            if (data.success) {
+                displayMessages(data.messages);
             }
         })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Error suspending staff member');
+        .catch(error => console.error('Error loading messages:', error));
+}
+
+function displayMessages(messages) {
+    const container = document.getElementById('chatMessages');
+    
+    if (!messages || messages.length === 0) {
+        container.innerHTML = `
+            <div class="text-center text-muted py-5">
+                <i class="fas fa-comments fa-3x mb-3"></i>
+                <p>No messages yet. Start the conversation!</p>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = messages.map(msg => {
+        const isSent = msg.senderRole === 'admin';
+        const messageClass = isSent ? 'sent' : 'received';
+        const time = new Date(msg.createdAt).toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        
+        return `
+            <div class="chat-message ${messageClass}">
+                ${!isSent ? `<div class="chat-sender">${msg.senderName}</div>` : ''}
+                <div class="chat-bubble">${msg.message}</div>
+                <div class="chat-time">${time}</div>
+            </div>
+        `;
+    }).join('');
+    
+    // Scroll to bottom
+    container.scrollTop = container.scrollHeight;
+}
+
+function sendMessage() {
+    const input = document.getElementById('chatMessageInput');
+    const message = input.value.trim();
+    
+    if (!message || !currentChatStaffId) return;
+    
+    fetch('/api/messages/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            receiverId: currentChatStaffId,
+            receiverName: currentChatStaffName,
+            message: message
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            input.value = '';
+            loadChatMessages();
+        } else {
+            showNotification('error', 'Failed to send message');
+        }
+    })
+    .catch(error => {
+        console.error('Error sending message:', error);
+        showNotification('error', 'Error sending message');
+    });
+}
+
+// Allow Enter to send (Shift+Enter for new line)
+document.addEventListener('DOMContentLoaded', function() {
+    const chatInput = document.getElementById('chatMessageInput');
+    if (chatInput) {
+        chatInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
         });
     }
-}
+});
 </script>

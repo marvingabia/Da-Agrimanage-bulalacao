@@ -494,14 +494,19 @@
                 <!-- Profile Card -->
                 <div class="settings-card">
                     <div class="text-center">
-                        <div class="profile-avatar">
-                            {{firstChar user.name}}
+                        <div class="profile-avatar" id="settings-avatar-wrapper" onclick="openSettingsProfilePic()" title="Change Profile Picture" style="cursor:pointer; position:relative;">
+                            <span id="settings-avatar-initials">{{firstChar user.name}}</span>
+                            <img id="settings-avatar-img" src="" alt="Profile" style="display:none; position:absolute; inset:0; width:100%; height:100%; object-fit:cover; border-radius:50%;">
+                            <div style="position:absolute; bottom:4px; right:4px; width:28px; height:28px; background:#667eea; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid white;">
+                                <i class="fas fa-camera" style="font-size:0.65rem; color:white;"></i>
+                            </div>
                         </div>
                         <h4 class="mb-1">{{user.name}}</h4>
                         <span class="role-badge role-{{user.role}}">{{user.role}}</span>
                         <p class="text-muted mt-2 mb-0">{{user.email}}</p>
                     </div>
                 </div>
+                <input type="file" id="settingsProfilePicInput" accept="image/*" style="display:none;" onchange="handleSettingsProfilePic(event)">
 
                 <!-- Quick Actions -->
                 <div class="settings-card">
@@ -762,6 +767,38 @@
                 // Here you can add AJAX call to save preferences
             });
         });
+
+        // Profile picture from localStorage
+        const USER_ID = '{{user.id}}';
+        window.addEventListener('DOMContentLoaded', function() {
+            const saved = localStorage.getItem('profilePic_' + USER_ID);
+            if (saved) {
+                const img = document.getElementById('settings-avatar-img');
+                const init = document.getElementById('settings-avatar-initials');
+                if (img) { img.src = saved; img.style.display = 'block'; }
+                if (init) init.style.display = 'none';
+            }
+        });
+
+        function openSettingsProfilePic() {
+            document.getElementById('settingsProfilePicInput').click();
+        }
+
+        function handleSettingsProfilePic(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            if (file.size > 2 * 1024 * 1024) { alert('Max 2MB allowed.'); return; }
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                localStorage.setItem('profilePic_' + USER_ID, e.target.result);
+                const img = document.getElementById('settings-avatar-img');
+                const init = document.getElementById('settings-avatar-initials');
+                if (img) { img.src = e.target.result; img.style.display = 'block'; }
+                if (init) init.style.display = 'none';
+                alert('✅ Profile picture saved! It will appear on your dashboard.');
+            };
+            reader.readAsDataURL(file);
+        }
     </script>
 </body>
 </html>

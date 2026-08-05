@@ -4,13 +4,19 @@
 
 import { getPool } from '../config/database.js';
 
+function requirePool() {
+    const pool = getPool();
+    if (!pool) throw new Error('MySQL database is not available. Please ensure MySQL/Laragon is running.');
+    return pool;
+}
+
 export class Insurance {
     constructor(data) {
         Object.assign(this, data);
     }
 
     async save() {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             if (!this.id) {
                 this.id = `INS-${Date.now()}`;
@@ -34,7 +40,7 @@ export class Insurance {
     }
 
     static async findAll() {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const [rows] = await pool.query('SELECT * FROM insurance ORDER BY createdAt DESC');
             return rows.map(row => new Insurance(row));
@@ -45,7 +51,7 @@ export class Insurance {
     }
 
     static async findById(id) {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const [rows] = await pool.query('SELECT * FROM insurance WHERE id = ?', [id]);
             return rows.length > 0 ? new Insurance(rows[0]) : null;
@@ -56,7 +62,7 @@ export class Insurance {
     }
 
     static async findByFarmer(farmerId) {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const [rows] = await pool.query(
                 'SELECT * FROM insurance WHERE farmerId = ? ORDER BY createdAt DESC',
@@ -70,7 +76,7 @@ export class Insurance {
     }
 
     static async update(id, data) {
-        const pool = getPool();
+        const pool = requirePool();
         try {
             const fields = [];
             const values = [];
@@ -97,3 +103,5 @@ export class Insurance {
 }
 
 export default Insurance;
+
+
