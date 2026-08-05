@@ -32,7 +32,7 @@
         }
     </style>
 </head>
-<body data-user-role="{{user.role}}"
+<body data-user-role="{{user.role}}">
     <!-- Mobile Hamburger Menu -->
     <button class="hamburger-btn" onclick="toggleSidebar()">
         <i class="fas fa-bars"></i>
