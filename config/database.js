@@ -18,9 +18,9 @@ const dbConfig = {
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
-    // SSL for cloud databases (PlanetScale, Filess.io, Railway, etc.)
-    // Auto-enable SSL when DB_HOST is not localhost, or when DB_SSL=true
-    ...((process.env.DB_SSL === 'true' || (process.env.DB_HOST && process.env.DB_HOST !== 'localhost')) && !isPlanetScale && {
+    // SSL: only enable when explicitly set via DB_SSL=true
+    // Filess.io does NOT require SSL on shared plans
+    ...(process.env.DB_SSL === 'true' && !isPlanetScale && {
         ssl: { rejectUnauthorized: false }
     }),
 };
