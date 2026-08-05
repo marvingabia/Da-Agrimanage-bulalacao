@@ -56,37 +56,13 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(path.join(process.cwd(), "public")));
 
 // ── Sessions ─────────────────────────────────────────────────────────────────
-// Use MySQL-backed sessions when DB is available (works on Vercel + cloud DB)
-// Falls back to in-memory sessions when DB is not available (local dev without DB)
-let sessionStore;
-try {
-    const pool = getPool();
-    if (pool) {
-        const MySQLStore = MySQLStoreFactory(session);
-        sessionStore = new MySQLStore({
-            checkExpirationInterval: 900000,  // 15 minutes
-            expiration: 86400000,             // 24 hours
-            createDatabaseTable: true,
-            schema: {
-                tableName: 'sessions',
-                columnNames: {
-                    session_id: 'session_id',
-                    expires: 'expires',
-                    data: 'data'
-                }
-            }
-        }, pool);
-        console.log('✅ MySQL session store initialized');
-    }
-} catch (e) {
-    console.log('⚠️  Using in-memory sessions (DB not available)');
-}
+// Use in-memory sessions (works reliably on Vercel serverless)
+// MySQL session store causes issues with IP restrictions on cloud DB providers
 
 app.use(session({
     secret: process.env.SESSION_SECRET || 'xianfire-secret-key-change-in-production',
     resave: false,
     saveUninitialized: false,
-    store: sessionStore || undefined,   // use MySQL store if available
     cookie: {
         secure: process.env.NODE_ENV === 'production',
         httpOnly: true,
@@ -95,6 +71,8 @@ app.use(session({
     },
     proxy: process.env.NODE_ENV === 'production'
 }));
+
+console.log('✅ Session store initialized (in-memory)');
 
 // Initialize Passport for Google OAuth
 configurePassport();
