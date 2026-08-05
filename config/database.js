@@ -11,17 +11,21 @@ const isPlanetScale = process.env.DB_HOST?.includes('psdb.cloud');
 
 const dbConfig = {
     host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',           // Default phpMyAdmin user
-    password: process.env.DB_PASSWORD || '',       // Default phpMyAdmin password (empty)
-    database: process.env.DB_NAME || 'da_agrimanage',  // Change this to your database name
+    port: parseInt(process.env.DB_PORT) || 3306,
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'da_agrimanage',
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
+    // SSL for cloud databases (PlanetScale, Filess.io, Railway, etc.)
+    // Auto-enable SSL when DB_HOST is not localhost, or when DB_SSL=true
+    ...((process.env.DB_SSL === 'true' || (process.env.DB_HOST && process.env.DB_HOST !== 'localhost')) && !isPlanetScale && {
+        ssl: { rejectUnauthorized: false }
+    }),
     // PlanetScale specific settings
     ...(isPlanetScale && {
-        ssl: {
-            rejectUnauthorized: true
-        }
+        ssl: { rejectUnauthorized: true }
     })
 };
 
@@ -29,34 +33,50 @@ const dbConfig = {
 let pool;
 
 export async function initDatabase() {
+    const isCloudDB = process.env.DB_HOST && process.env.DB_HOST !== 'localhost';
+
     try {
-        // First, connect without database to create it if it doesn't exist
-        const connection = await mysql.createConnection({
-            host: dbConfig.host,
-            user: dbConfig.user,
-            password: dbConfig.password
-        });
+        if (isCloudDB) {
+            // Cloud DB (Filess.io, Railway, PlanetScale, etc.)
+            // Database already exists on the cloud — skip CREATE DATABASE step
+            pool = mysql.createPool(dbConfig);
 
-        // Create database if it doesn't exist
-        await connection.query(`CREATE DATABASE IF NOT EXISTS ${dbConfig.database}`);
-        console.log('✅ Database created/verified:', dbConfig.database);
-        await connection.end();
+            const testConnection = await pool.getConnection();
+            console.log('✅ MySQL Cloud Connected successfully!');
+            console.log(`📡 Host: ${dbConfig.host}:${dbConfig.port} | DB: ${dbConfig.database}`);
+            testConnection.release();
+        } else {
+            // Local DB (Laragon/XAMPP) — create database if it doesn't exist
+            const connection = await mysql.createConnection({
+                host: dbConfig.host,
+                port: dbConfig.port,
+                user: dbConfig.user,
+                password: dbConfig.password
+            });
 
-        // Now create the pool with the database
-        pool = mysql.createPool(dbConfig);
-        
-        // Test the connection
-        const testConnection = await pool.getConnection();
-        console.log('✅ MySQL Connected successfully!');
-        testConnection.release();
+            await connection.query(`CREATE DATABASE IF NOT EXISTS \`${dbConfig.database}\``);
+            console.log('✅ Database created/verified:', dbConfig.database);
+            await connection.end();
+
+            pool = mysql.createPool(dbConfig);
+
+            const testConnection = await pool.getConnection();
+            console.log('✅ MySQL Local Connected successfully!');
+            testConnection.release();
+        }
 
         // Create tables
         await createTables();
-        
+
         return pool;
     } catch (error) {
         console.error('❌ MySQL Connection Error:', error.message);
-        console.error('💡 Make sure Laragon/XAMPP is running with MySQL started');
+        if (isCloudDB) {
+            console.error('💡 Check your Filess.io credentials and DB_PORT (usually 3307)');
+            console.error('💡 Make sure DB_SSL=true is set if the host requires SSL');
+        } else {
+            console.error('💡 Make sure Laragon/XAMPP is running with MySQL started');
+        }
         console.error('📝 System will continue in fallback mode (local storage)');
         // Don't throw error, allow app to continue
         return null;
