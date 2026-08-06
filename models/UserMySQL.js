@@ -307,11 +307,28 @@ export class User {
         const pool = requirePool();
         try {
             const [result] = await pool.query('DELETE FROM users WHERE id = ?', [id]);
-            
             console.log(`✅ Deleted user ${id}:`, result.affectedRows, 'rows affected');
             return result.affectedRows > 0;
         } catch (error) {
             console.error('Error deleting user:', error);
+            throw error;
+        }
+    }
+
+    static async getStats() {
+        const pool = requirePool();
+        try {
+            const [rows] = await pool.query(`SELECT role, COUNT(*) as count FROM users GROUP BY role`);
+            const stats = { total: 0, farmers: 0, staff: 0, admins: 0 };
+            rows.forEach(r => {
+                stats.total += Number(r.count);
+                if (r.role === 'farmer') stats.farmers = Number(r.count);
+                if (r.role === 'staff') stats.staff = Number(r.count);
+                if (r.role === 'admin') stats.admins = Number(r.count);
+            });
+            return stats;
+        } catch (error) {
+            console.error('Error getting user stats:', error);
             throw error;
         }
     }

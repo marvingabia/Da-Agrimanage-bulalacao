@@ -81,23 +81,51 @@ export class DamageReport {
         try {
             const fields = [];
             const values = [];
-            
-            // Build dynamic update query
-            Object.keys(data).forEach(key => {
-                fields.push(`${key} = ?`);
-                values.push(data[key]);
-            });
-            
+            Object.keys(data).forEach(key => { fields.push(`${key} = ?`); values.push(data[key]); });
             values.push(id);
-            
-            await pool.query(
-                `UPDATE damage_reports SET ${fields.join(', ')} WHERE id = ?`,
-                values
-            );
-            
+            await pool.query(`UPDATE damage_reports SET ${fields.join(', ')} WHERE id = ?`, values);
             return await DamageReport.findById(id);
         } catch (error) {
             console.error('Error updating damage report:', error);
+            throw error;
+        }
+    }
+
+    async delete() {
+        const pool = requirePool();
+        try {
+            await pool.query('DELETE FROM damage_reports WHERE id = ?', [this.id]);
+            return true;
+        } catch (error) {
+            console.error('Error deleting damage report:', error);
+            throw error;
+        }
+    }
+
+    async updateStatus(status, verifiedBy, notes) {
+        const pool = requirePool();
+        try {
+            await pool.query(
+                `UPDATE damage_reports SET status = ?, verificationNotes = ?, verifiedBy = ?, verifiedAt = NOW(), updatedAt = NOW() WHERE id = ?`,
+                [status, notes, verifiedBy, this.id]
+            );
+            this.status = status;
+            return this;
+        } catch (error) {
+            console.error('Error updating damage report status:', error);
+            throw error;
+        }
+    }
+
+    static async getStats() {
+        const pool = requirePool();
+        try {
+            const [rows] = await pool.query(`SELECT status, COUNT(*) as count FROM damage_reports GROUP BY status`);
+            const stats = { total: 0, pending: 0, verified: 0, rejected: 0 };
+            rows.forEach(r => { stats[r.status] = r.count; stats.total += r.count; });
+            return stats;
+        } catch (error) {
+            console.error('Error getting damage report stats:', error);
             throw error;
         }
     }

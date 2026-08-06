@@ -3,8 +3,19 @@
     Authentication Middleware
 */
 
+// Helper: detect if request expects JSON (API call)
+const isApiRequest = (req) => {
+    return req.originalUrl.includes('/api/') ||
+           req.path.startsWith('/api/') ||
+           (req.headers.accept && req.headers.accept.includes('application/json')) ||
+           req.xhr;
+};
+
 export const requireAuth = (req, res, next) => {
     if (!req.session.userId) {
+        if (isApiRequest(req)) {
+            return res.status(401).json({ error: 'Not authenticated' });
+        }
         return res.redirect('/login');
     }
     next();
@@ -13,16 +24,14 @@ export const requireAuth = (req, res, next) => {
 export const requireRole = (roles) => {
     return (req, res, next) => {
         if (!req.session.userId) {
-            // Check if it's an API request
-            if (req.path.startsWith('/api/')) {
+            if (isApiRequest(req)) {
                 return res.status(401).json({ error: 'Not authenticated' });
             }
             return res.redirect('/login');
         }
         
         if (!roles.includes(req.session.userRole)) {
-            // Check if it's an API request
-            if (req.path.startsWith('/api/')) {
+            if (isApiRequest(req)) {
                 return res.status(403).json({ error: 'Access denied. Insufficient permissions.' });
             }
             return res.status(403).render('error', { 

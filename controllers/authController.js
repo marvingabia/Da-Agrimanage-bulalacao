@@ -49,7 +49,7 @@ export const dashboardPage = async (req, res) => {
     });
   } catch (error) {
     console.error("Dashboard error:", error.message);
-    // Fallback with session data
+    // Fallback with session data on error
     res.render("dashboard", { 
       title: "AgriSystem Dashboard",
       user: {
@@ -59,11 +59,11 @@ export const dashboardPage = async (req, res) => {
         email: req.session.userEmail || 'unknown@email.com'
       },
       stats: {
-        totalFarmers: localUsers.size || 0,
+        totalFarmers: 0,
         totalClaims: 0,
         pendingReports: 0,
         inventoryItems: 0,
-        totalStaff: Array.from(localUsers.values()).filter(u => u.role === 'staff').length || 0,
+        totalStaff: 0,
         totalAdmins: 1,
         pendingClaims: 0,
         availableItems: 0,
@@ -92,16 +92,7 @@ export const loginUser = async (req, res) => {
       console.error('❌ MySQL error during login:', dbError.message);
     }
     
-    // Fallback to local storage if not found in MySQL
-    if (!user) {
-      const localUser = localUsers.get(email);
-      if (localUser) {
-        user = localUser;
-        console.log(`✅ User found in local storage: ${user.name} (${user.role})`);
-      }
-    }
-
-    // Fallback: check .env admin credentials if still not found
+    // Fallback to .env admin credentials if not found in MySQL
     if (!user) {
       const adminEmail = process.env.ADMIN_EMAIL;
       const adminPassword = process.env.ADMIN_PASSWORD;
@@ -272,35 +263,37 @@ export const registerUser = async (req, res) => {
   const { name, email, password, phone, barangay, role, landArea, landType, staffingManagement, dob } = req.body;
   
   try {
-    // Import MySQL User model
-    const { User } = await import('../models/UserMySQL.js');
-    
     // Check if user already exists in MySQL
-    const existingUser = await User.findByEmail(email);
-    if (existingUser) {
-      return res.render("login", { 
+    try {
+      const { User } = await import('../models/UserMySQL.js');
+      const existingUser = await User.findByEmail(email);
+      if (existingUser) {
+        return res.render("login", { 
+          title: "iBarangay Login - Agricultural Management System",
+          error: "Email is already registered"
+        });
+      }
+    } catch (dbError) {
+      console.error('❌ MySQL error during duplicate check:', dbError.message);
+      return res.render("login", {
         title: "iBarangay Login - Agricultural Management System",
-        error: "Email is already registered"
-      });
-    }
-    
-    // Check if user already exists in local storage
-    if (localUsers.has(email)) {
-      return res.render("login", { 
-        title: "iBarangay Login - Agricultural Management System",
-        error: "Email is already registered"
+        error: "Registration failed: could not reach the database. Please try again."
       });
     }
 
     // Create user ID
     const userId = `${role}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 
+    // Hash password
+    const bcrypt = await import('bcrypt');
+    const hashedPassword = await bcrypt.default.hash(password, 10);
+
     // Create user profile based on role
     const userData = {
       id: userId,
       name,
       email,
-      password,
+      password: hashedPassword,
       phone,
       dob: dob || null,
       role: role || 'farmer',
@@ -322,37 +315,28 @@ export const registerUser = async (req, res) => {
       userData.isApproved = false;
     }
 
-    // Save to MySQL database
-    const mysqlUser = new User(userData);
-    await mysqlUser.save();
-    console.log(`✅ User saved to MySQL: ${name} (${email}) - Role: ${role}, Approved: ${userData.isApproved}`);
-
-    // Store user locally for session management
-    localUsers.set(email, userData);
+    // Try to save to MySQL database
+    try {
+      const { User } = await import('../models/UserMySQL.js');
+      const mysqlUser = new User(userData);
+      await mysqlUser.save();
+      console.log(`✅ User saved to MySQL: ${name} (${email}) - Role: ${role}`);
+    } catch (dbError) {
+      console.error(`❌ MySQL save failed for ${email}:`, dbError.message);
+      return res.render("login", {
+        title: "iBarangay Login - Agricultural Management System",
+        error: "Registration failed: could not reach the database. Please try again."
+      });
+    }
     
-    // Add to registered users array for admin management
-    registeredUsers.push(userData);
-    
-    console.log(`${role} registered successfully:`, name, email);
-    console.log(`📊 Total users in local storage: ${localUsers.size}`);
-    console.log(`📊 Total registered users: ${registeredUsers.length}`);
-    
-    // Trigger real-time notification for admin (in a real system, this would use WebSocket)
-    console.log(`REAL-TIME NOTIFICATION: New ${role} registered - ${name} (${email})`);
+    console.log(`✅ ${role} registered: ${name} (${email})`);
     
     // Store notification for admin dashboard
-    if (!global.pendingNotifications) {
-        global.pendingNotifications = [];
-    }
+    if (!global.pendingNotifications) global.pendingNotifications = [];
     global.pendingNotifications.push({
         type: 'new_registration',
         userType: role,
-        userData: {
-            name: name,
-            email: email,
-            barangay: barangay,
-            registrationDate: new Date().toISOString()
-        },
+        userData: { name, email, barangay, registrationDate: new Date().toISOString() },
         timestamp: new Date().toISOString()
     });
 
@@ -363,21 +347,19 @@ export const registerUser = async (req, res) => {
       req.session.userName = name;
       req.session.userBarangay = barangay;
       req.session.userEmail = email;
-      
-      console.log('Farmer auto-login successful, redirecting to dashboard');
+      console.log('✅ Farmer auto-login, redirecting to dashboard');
       return res.redirect("/dashboard");
     }
 
-    // For staff, show pending approval message and store admin notification
+    // For staff — pending approval message
     if (role === 'staff') {
-      // Store pending staff notification for admin dashboard
       if (!global.pendingStaffNotifications) global.pendingStaffNotifications = [];
       global.pendingStaffNotifications.push({
         type: 'new_staff_registration',
         staffId: userId,
         staffName: name,
         staffEmail: email,
-        barangay: barangay,
+        barangay,
         dob: dob || null,
         phone: phone || null,
         timestamp: new Date().toISOString()
@@ -386,17 +368,18 @@ export const registerUser = async (req, res) => {
 
       return res.render("login", { 
         title: "iBarangay Login - Agricultural Management System",
-        success: `Registration submitted! Welcome ${name}. Your account is pending admin approval. You will receive access once an administrator reviews your registration.`
+        success: `Registration submitted! Welcome ${name}. Your account is pending admin approval. You will receive access once an administrator approves your registration.`
       });
     }
 
-    // For others, show success message and redirect to login
+    // Other roles
     res.render("login", { 
       title: "iBarangay Login - Agricultural Management System",
-      success: `Registration successful! Welcome ${name}. Please login with your email (${email}) and password to access your dashboard.`,
+      success: `Registration successful! Welcome ${name}. Please login with your credentials.`,
       registeredEmail: email,
       registeredRole: role
     });
+
   } catch (error) {
     console.error("Registration error:", error.message);
     res.render("login", { 
@@ -466,22 +449,20 @@ async function getDashboardStats() {
         pendingRequestLetters: requestLetters.filter(r => r.status === 'pending').length
       };
     } catch (dbError) {
-      console.log('⚠️ MySQL not available for stats, using local storage');
-      // Fallback to local storage
-      const users = Array.from(localUsers.values());
-      const farmers = users.filter(u => u.role === 'farmer');
-      const staff = users.filter(u => u.role === 'staff');
-      
+      console.error('❌ MySQL unavailable for dashboard stats:', dbError.message);
       return {
-        totalFarmers: farmers.length,
-        totalClaims: Math.floor(farmers.length * 1.5),
-        pendingReports: Math.floor(farmers.length * 0.3),
-        inventoryItems: 25 + (staff.length * 5),
-        totalStaff: staff.length,
+        totalFarmers: 0,
+        totalClaims: 0,
+        pendingClaims: 0,
+        pendingReports: 0,
+        inventoryItems: 0,
+        availableItems: 0,
+        totalStaff: 0,
+        pendingStaff: 0,
         totalAdmins: 1,
-        pendingClaims: Math.floor(farmers.length * 0.2),
-        availableItems: 20 + (staff.length * 3),
-        activeAnnouncements: 3 + Math.floor(users.length / 5)
+        activeAnnouncements: 0,
+        totalRequestLetters: 0,
+        pendingRequestLetters: 0
       };
     }
   } catch (error) {
@@ -522,11 +503,6 @@ export const googleAuth = async (req, res) => {
     
     // Check if user already exists in MySQL
     let user = await User.findByEmail(email);
-    
-    if (!user) {
-      // Check local storage as fallback
-      user = localUsers.get(email);
-    }
     
     if (user) {
       // User exists, log them in
@@ -574,9 +550,6 @@ export const googleAuth = async (req, res) => {
       await mysqlUser.save();
       console.log(`✅ Google user saved to MySQL: ${name} (${email})`);
 
-      // Store user locally for session management
-      localUsers.set(email, userData);
-      
       // Create session
       req.session.userId = userId;
       req.session.userRole = 'farmer';
@@ -805,56 +778,18 @@ export const rejectStaff = async (req, res) => {
     const { staffId } = req.params;
     const { reason } = req.body;
     
-    // Try MySQL first
-    try {
-      const { User } = await import('../models/UserMySQL.js');
-      await User.rejectStaff(staffId);
-      
-      // Also remove from local storage if exists
-      for (const [email, user] of localUsers.entries()) {
-        if (user.id === staffId && user.role === 'staff') {
-          localUsers.delete(email);
-          break;
-        }
-      }
-      
-      console.log(`✅ Staff rejected in MySQL: ${staffId} by ${req.session.userName}. Reason: ${reason || 'Not specified'}`);
-      
-      res.json({
-        success: true,
-        message: 'Staff registration has been rejected'
-      });
-    } catch (dbError) {
-      console.log('⚠️ MySQL not available, using local storage');
-      // Fallback to local storage
-      let staffToReject = null;
-      for (const [email, user] of localUsers.entries()) {
-        if (user.id === staffId && user.role === 'staff') {
-          staffToReject = user;
-          localUsers.delete(email);
-          break;
-        }
-      }
-      
-      if (!staffToReject) {
-        return res.status(404).json({ success: false, error: 'Staff member not found' });
-      }
-      
-      console.log(`Staff rejected: ${staffToReject.name} by ${req.session.userName}. Reason: ${reason || 'Not specified'}`);
-      
-      res.json({
-        success: true,
-        message: `${staffToReject.name}'s registration has been rejected`,
-        staff: {
-          id: staffToReject.id,
-          name: staffToReject.name,
-          email: staffToReject.email
-        }
-      });
-    }
+    const { User } = await import('../models/UserMySQL.js');
+    await User.rejectStaff(staffId);
+    
+    console.log(`✅ Staff rejected in MySQL: ${staffId} by ${req.session.userName}. Reason: ${reason || 'Not specified'}`);
+    
+    res.json({
+      success: true,
+      message: 'Staff registration has been rejected'
+    });
   } catch (error) {
-    console.error('Error rejecting staff:', error);
-    res.status(500).json({ success: false, error: 'Failed to reject staff' });
+    console.error('❌ Error rejecting staff:', error);
+    res.status(500).json({ success: false, error: 'Failed to reject staff: ' + error.message });
   }
 };
 
@@ -863,63 +798,34 @@ export const getAllStaff = async (req, res) => {
   try {
     console.log('📋 API called: /api/admin/all-staff');
     
-    // Try MySQL first
-    try {
-      const { User } = await import('../models/UserMySQL.js');
-      const allStaff = await User.findByRole('staff');
-      
-      // Filter only APPROVED staff (isApproved = 1 or true)
-      const approvedStaff = allStaff.filter(
-        staff => staff.isApproved === true || staff.isApproved === 1 || staff.isApproved === '1'
-      );
-      
-      console.log(`✅ Found ${approvedStaff.length} approved staff in MySQL (out of ${allStaff.length} total staff)`);
-      
-      res.json({
-        success: true,
-        staff: approvedStaff.map(staff => ({
-          id: staff.id,
-          name: staff.name,
-          email: staff.email,
-          phone: staff.phone,
-          barangay: staff.barangay,
-          dob: staff.dob,
-          position: staff.staffingManagement || 'Agricultural Staff',
-          status: 'approved',
-          registrationDate: staff.createdAt,
-          approvedAt: staff.approvedAt,
-          isApproved: staff.isApproved
-        }))
-      });
-    } catch (dbError) {
-      console.log('⚠️ MySQL not available, using local storage');
-      
-      // Fallback to local storage
-      const allStaff = Array.from(localUsers.values()).filter(
-        user => user.role === 'staff' && (user.approved === true || user.isApproved === true || user.isApproved === 1)
-      );
-      
-      console.log(`✅ Found ${allStaff.length} approved staff in local storage`);
-      
-      res.json({
-        success: true,
-        staff: allStaff.map(staff => ({
-          id: staff.id,
-          name: staff.name,
-          email: staff.email,
-          phone: staff.phone,
-          barangay: staff.barangay,
-          dob: staff.dob,
-          position: staff.staffingManagement || 'Agricultural Staff',
-          status: staff.approved ? 'approved' : 'pending',
-          registrationDate: staff.createdAt,
-          approvedAt: staff.approvedAt,
-          approvedBy: staff.approvedBy
-        }))
-      });
-    }
+    const { User } = await import('../models/UserMySQL.js');
+    const allStaff = await User.findByRole('staff');
+    
+    // Filter only APPROVED staff (isApproved = 1 or true)
+    const approvedStaff = allStaff.filter(
+      staff => staff.isApproved === true || staff.isApproved === 1 || staff.isApproved === '1'
+    );
+    
+    console.log(`✅ Found ${approvedStaff.length} approved staff in MySQL (out of ${allStaff.length} total staff)`);
+    
+    res.json({
+      success: true,
+      staff: approvedStaff.map(staff => ({
+        id: staff.id,
+        name: staff.name,
+        email: staff.email,
+        phone: staff.phone,
+        barangay: staff.barangay,
+        dob: staff.dob,
+        position: staff.staffingManagement || 'Agricultural Staff',
+        status: 'approved',
+        registrationDate: staff.createdAt,
+        approvedAt: staff.approvedAt,
+        isApproved: staff.isApproved
+      }))
+    });
   } catch (error) {
     console.error('❌ Error getting all staff:', error);
-    res.status(500).json({ success: false, error: 'Failed to load staff list' });
+    res.status(500).json({ success: false, error: 'Failed to load staff list: ' + error.message });
   }
 };

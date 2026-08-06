@@ -237,7 +237,10 @@
 <script>
 // Load damage reports on page load
 document.addEventListener('DOMContentLoaded', function() {
-    if (document.getElementById('damage-reports-table')) {
+    // Only auto-load for staff/admin who have MySQL data to show
+    // Farmers use optimistic UI — rows are added directly on submit
+    const userRole = document.body.getAttribute('data-user-role') || window.USER_ROLE || '';
+    if ((userRole === 'staff' || userRole === 'admin') && document.getElementById('damage-reports-table')) {
         loadDamageReports();
     }
 });
@@ -245,6 +248,7 @@ document.addEventListener('DOMContentLoaded', function() {
 function loadDamageReports() {
     const userRole = document.body.getAttribute('data-user-role') || window.USER_ROLE || 'farmer';
     const endpoint = userRole === 'farmer' ? '/api/farmer/damage-reports' : '/api/damage-reports';
+
     fetch(endpoint)
         .then(response => response.json())
         .then(data => {
@@ -334,6 +338,8 @@ function loadDamageReports() {
 
 // Make globally accessible for auto-refresh
 window.loadDamageReports = loadDamageReports;
+// Track if farmer already has optimistic rows (don't reload and wipe them)
+window._damageReportsLoaded = false;
 
 // Auto-refresh for staff/admin every 10 seconds when section is visible
 (function() {
@@ -347,6 +353,16 @@ window.loadDamageReports = loadDamageReports;
         }, 10000);
     }
 })();
+
+// Safe load — for farmer, only load from server on first open (not after optimistic add)
+window.loadDamageReportsSafe = function() {
+    const userRole = document.body.getAttribute('data-user-role') || window.USER_ROLE || 'farmer';
+    if (userRole === 'farmer' && window._damageReportsLoaded) {
+        return; // Skip reload to preserve optimistic rows
+    }
+    window._damageReportsLoaded = true;
+    loadDamageReports();
+};
 
 function submitDamageReport(event) {
     event.preventDefault();
@@ -396,6 +412,51 @@ function submitDamageReport(event) {
     setTimeout(() => {
         showDamageSuccessPopup('Damage Report Submitted!', 'Your damage report has been submitted successfully. Staff will verify it soon.');
     }, 200);
+
+    // Optimistically add row to table immediately (don't wait for server)
+    const tempId = 'DMG-' + Date.now();
+    data._tempId = tempId;
+    // Mark as loaded so showSection won't reload and wipe this row
+    window._damageReportsLoaded = true;
+    setTimeout(() => {
+        const tbody = document.getElementById('damage-reports-table');
+        if (tbody) {
+            // Remove empty state if present
+            const emptyRow = tbody.querySelector('td.premium-empty-state');
+            if (emptyRow) emptyRow.closest('tr').remove();
+
+            const newRow = document.createElement('tr');
+            newRow.id = 'row-' + tempId;
+            newRow.className = 'animate-fade-in';
+            newRow.innerHTML = `
+                <td><strong>#${tempId}</strong></td>
+                <td><strong>${data.farmerName}</strong></td>
+                <td><span class="badge bg-secondary">${data.barangay}</span></td>
+                <td>${new Date(data.incidentDate).toLocaleDateString('en-US', {year:'numeric',month:'short',day:'numeric'})}</td>
+                <td><span class="badge bg-danger"><i class="fas fa-bolt me-1"></i>${data.disasterType}</span></td>
+                <td><span class="badge bg-success">${data.cropType}</span></td>
+                <td>
+                    <div class="progress" style="height:22px;border-radius:10px;">
+                        <div class="progress-bar ${data.damagePercentage > 75 ? 'bg-danger' : data.damagePercentage > 50 ? 'bg-warning' : 'bg-info'}"
+                             style="width:${data.damagePercentage}%;font-weight:600;">
+                            ${data.damagePercentage}%
+                        </div>
+                    </div>
+                </td>
+                <td><strong>${data.affectedArea} ha</strong></td>
+                <td><span class="premium-badge premium-badge-pending"><i class="fas fa-clock me-1"></i>pending</span></td>
+                <td><span style="font-size:0.8rem;color:#64748b;font-style:italic;">Just submitted</span></td>
+            `;
+            tbody.prepend(newRow);
+
+            // Update badge count
+            const badge = document.getElementById('damage-count-badge');
+            if (badge) {
+                const count = tbody.querySelectorAll('tr').length;
+                badge.textContent = `${count} Report${count !== 1 ? 's' : ''}`;
+            }
+        }
+    }, 300);
     
     // Send to server in background
     fetch('/api/farmer/damage-report', {
@@ -407,19 +468,23 @@ function submitDamageReport(event) {
     .then(result => {
         if (result.success) {
             console.log('✅ Damage report saved:', result);
+            // Update the "Just submitted" action cell with actual ID if returned
+            if (result.damageReport && result.damageReport.id) {
+                const firstRow = document.querySelector('#damage-reports-table tr:first-child td:first-child strong');
+                if (firstRow && firstRow.textContent === '#DMG-' + data._tempId) {
+                    firstRow.textContent = '#' + result.damageReport.id;
+                }
+            }
+            // Update dashboard counts
+            if (typeof loadDashboardData === 'function') {
+                setTimeout(() => loadDashboardData(), 500);
+            }
         } else {
             console.error('❌ Server error saving damage report:', result.error);
         }
     })
     .catch(error => {
-        console.error('⚠️ Error saving damage report:', error);
-    })
-    .finally(() => {
-        // Always reload the table whether success or fail
-        setTimeout(() => loadDamageReports(), 600);
-        if (typeof loadDashboardData === 'function') {
-            setTimeout(() => loadDashboardData(), 700);
-        }
+        console.error('⚠️ Error saving damage report (kept in display):', error);
     });
 }
 
@@ -629,6 +694,7 @@ function showErrorPopup(title, message) {
     document.getElementById('errorPopupTitle').textContent = title;
     document.getElementById('errorPopupMessage').textContent = message;
     new bootstrap.Modal(document.getElementById('errorPopup')).show();
+}
 
 function deleteDamageReport(reportId) {
     if (!confirm('⚠️ Delete this damage report?\n\nThis action cannot be undone.')) return;
@@ -647,7 +713,6 @@ function deleteDamageReport(reportId) {
             }
         })
         .catch(err => alert('Delete failed: ' + err.message));
-}
 }
 
 // Evidence Image Upload Functions

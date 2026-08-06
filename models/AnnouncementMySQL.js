@@ -141,6 +141,30 @@ export class Announcement {
             throw error;
         }
     }
+
+    async delete() {
+        const pool = requirePool();
+        try {
+            await pool.query('DELETE FROM announcements WHERE id = ?', [this.id]);
+            return true;
+        } catch (error) {
+            console.error('Error deleting announcement:', error);
+            throw error;
+        }
+    }
+
+    static async getStats() {
+        const pool = requirePool();
+        try {
+            const [rows] = await pool.query(`SELECT status, COUNT(*) as count FROM announcements GROUP BY status`);
+            const stats = { total: 0, active: 0, archived: 0 };
+            rows.forEach(r => { stats[r.status] = r.count; stats.total += r.count; });
+            return stats;
+        } catch (error) {
+            console.error('Error getting announcement stats:', error);
+            throw error;
+        }
+    }
 }
 
 export default Announcement;

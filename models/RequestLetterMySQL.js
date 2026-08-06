@@ -91,6 +91,31 @@ export class RequestLetter {
         }
     }
 
+    static async findByStatus(status) {
+        const pool = requirePool();
+        try {
+            const [rows] = await pool.query(
+                'SELECT * FROM request_letters WHERE status = ? ORDER BY createdAt DESC',
+                [status]
+            );
+            return rows.map(row => new RequestLetter(row));
+        } catch (error) {
+            console.error('Error finding request letters by status:', error);
+            throw error;
+        }
+    }
+
+    async delete() {
+        const pool = requirePool();
+        try {
+            await pool.query('DELETE FROM request_letters WHERE id = ?', [this.id]);
+            return true;
+        } catch (error) {
+            console.error('Error deleting request letter:', error);
+            throw error;
+        }
+    }
+
     static async create(data) {
         const request = new RequestLetter(data);
         return await request.save();

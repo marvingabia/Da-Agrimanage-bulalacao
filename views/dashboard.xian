@@ -586,9 +586,9 @@
                 
                 // Call the appropriate load function for each section
                 setTimeout(() => {
-                    if (section === 'damage-reports' && typeof loadDamageReports === 'function') {
-                        console.log('?? Loading damage reports...');
-                        loadDamageReports();
+                    if (section === 'damage-reports' && typeof loadDamageReportsSafe === 'function') {
+                        console.log('🌾 Loading damage reports...');
+                        loadDamageReportsSafe();
                     } else if (section === 'insurance' && typeof loadInsurance === 'function') {
                         console.log('??? Loading insurance...');
                         loadInsurance();

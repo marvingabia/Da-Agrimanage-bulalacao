@@ -22,26 +22,27 @@ import {
 import { suspendStaff } from "../controllers/adminController.js";
 import { requireAuth, requireRole, redirectIfAuthenticated } from "../middleware/auth.js";
 
-// Local dashboard stats function for API routes
+// Local dashboard stats function for API routes — reads from MySQL
 async function getLocalDashboardStats() {
     try {
-        // Import the auth controller functions
-        const { getAllRegisteredFarmers, getFarmerStats } = await import("../controllers/authController.js");
-        const farmerStats = getFarmerStats();
-        
+        const { User } = await import('../models/UserMySQL.js');
+        const farmers = await User.findByRole('farmer');
+        const staff = await User.findByRole('staff');
+        const approvedStaff = staff.filter(s => s.isApproved === true || s.isApproved === 1);
+
         return {
-            totalFarmers: farmerStats.totalFarmers,
-            googleFarmers: farmerStats.googleFarmers,
-            emailFarmers: farmerStats.emailFarmers,
-            activeFarmers: farmerStats.activeFarmers,
-            totalClaims: Math.floor(farmerStats.totalFarmers * 1.5),
-            pendingReports: Math.floor(farmerStats.totalFarmers * 0.3),
-            inventoryItems: 25,
-            totalStaff: 5,
+            totalFarmers: farmers.length,
+            googleFarmers: farmers.filter(f => f.authProvider === 'google').length,
+            emailFarmers: farmers.filter(f => f.authProvider !== 'google').length,
+            activeFarmers: farmers.filter(f => f.status === 'active').length,
+            totalClaims: 0,
+            pendingReports: 0,
+            inventoryItems: 0,
+            totalStaff: approvedStaff.length,
             totalAdmins: 1,
-            pendingClaims: Math.floor(farmerStats.totalFarmers * 0.2),
-            availableItems: 20,
-            activeAnnouncements: 3
+            pendingClaims: 0,
+            availableItems: 0,
+            activeAnnouncements: 0
         };
     } catch (error) {
         console.error("Error getting dashboard stats:", error.message);
@@ -52,12 +53,12 @@ async function getLocalDashboardStats() {
             activeFarmers: 0,
             totalClaims: 0,
             pendingReports: 0,
-            inventoryItems: 25,
-            totalStaff: 3,
+            inventoryItems: 0,
+            totalStaff: 0,
             totalAdmins: 1,
             pendingClaims: 0,
-            availableItems: 20,
-            activeAnnouncements: 3
+            availableItems: 0,
+            activeAnnouncements: 0
         };
     }
 }
@@ -511,7 +512,7 @@ router.post("/api/staff/benefits/:benefitId/claim", requireRole(['staff', 'admin
 
 router.get("/api/staff/eligible-farmers", requireRole(['staff', 'admin']), async (req, res) => {
     try {
-        const { DamageReport } = await import("../models/DamageReport.js");
+        const { DamageReport } = await import("../models/DamageReportMySQL.js");
         const damageReports = await DamageReport.findAll();
         
         // Get unique farmers with damage reports
@@ -600,7 +601,7 @@ router.get("/api/inventory", requireAuth, async (req, res) => {
 
 router.get("/api/inventory/:id", requireAuth, async (req, res) => {
     try {
-        const { Inventory } = await import("../models/Inventory.js");
+        const { Inventory } = await import("../models/InventoryMySQL.js");
         const item = await Inventory.findById(req.params.id);
         if (!item) {
             return res.status(404).json({ success: false, error: 'Item not found' });
@@ -1239,15 +1240,9 @@ router.get("/api/farmers/list", requireAuth, async (req, res) => {
                 }
             });
         } catch (dbError) {
-            // Fallback to memory-based farmers
-            const { getAllRegisteredFarmers, getFarmerStats } = await import("../controllers/authController.js");
-            const farmers = getAllRegisteredFarmers();
-            const stats = getFarmerStats();
-            
-            res.json({
-                farmers: farmers,
-                stats: stats
-            });
+            // MySQL unavailable
+            console.error('❌ MySQL unavailable for farmers list:', dbError.message);
+            res.status(503).json({ error: 'Database unavailable. Please try again.' });
         }
     } catch (error) {
         console.error('Error getting farmers list:', error);

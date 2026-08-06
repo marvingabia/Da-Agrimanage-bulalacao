@@ -59,26 +59,25 @@ router.put('/reports/:id/status', updateDamageReportStatus);
 router.put('/insurance/:id/status', updateInsuranceStatus);
 
 // Staff & Farmer Management
-router.get('/staff/:id', getStaffById); // Get single staff for edit
-router.get('/staff', getAllStaff);
-router.post('/staff', createStaff);
-router.put('/staff/:id', updateStaff); // Update staff
-router.delete('/staff/:id', deleteStaff); // Delete staff
-router.get('/farmers', getAllFarmers);
-router.post('/farmers/:id/approve', approveFarmer); // Approve farmer
-router.post('/farmers/:id/reject', rejectFarmer); // Reject farmer
-
-// Dashboard
-router.get('/stats', getDashboardStats);
-router.get('/logs', getActivityLogs);
-
-// Staff Approval & Duty
-router.get('/staff/pending', getPendingStaff);
-router.post('/staff/approve', approveStaff);
-router.post('/staff/reject', rejectStaff);
+// NOTE: specific paths must come BEFORE /:id to avoid route conflicts
+router.get('/staff/pending', getPendingStaff);           // GET pending staff list
+router.post('/staff/approve/:staffId', approveStaff);    // Approve a staff member
+router.post('/staff/reject/:staffId', rejectStaff);      // Reject a staff member
 router.get('/staff/duty-status', getStaffDutyStatus);
 router.put('/staff/duty/:id/approve', approveStaffDuty);
 router.put('/staff/duty/:id/reject', rejectStaffDuty);
 router.put('/staff/duty/:id/end', endStaffDuty);
+router.get('/staff/:id', getStaffById);                  // Get single staff for edit
+router.get('/staff', getAllStaff);
+router.post('/staff', createStaff);
+router.put('/staff/:id', updateStaff);                   // Update staff
+router.delete('/staff/:id', deleteStaff);                // Delete staff
+router.get('/farmers', getAllFarmers);
+router.post('/farmers/:id/approve', approveFarmer);      // Approve farmer
+router.post('/farmers/:id/reject', rejectFarmer);        // Reject farmer
+
+// Dashboard
+router.get('/stats', getDashboardStats);
+router.get('/logs', getActivityLogs);
 
 export default router;

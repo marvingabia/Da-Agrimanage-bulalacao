@@ -1,12 +1,12 @@
 /*
     DA AgriManage - MySQL Database Configuration
     Connect to phpMyAdmin MySQL Database
+    Serverless-compatible (Vercel)
 */
 
 import mysql from 'mysql2/promise';
 
 // Database Configuration
-// Supports both local MySQL (Laragon/XAMPP) and PlanetScale
 const isPlanetScale = process.env.DB_HOST?.includes('psdb.cloud');
 
 const dbConfig = {
@@ -16,10 +16,13 @@ const dbConfig = {
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'da_agrimanage',
     waitForConnections: true,
-    connectionLimit: 10,
+    connectionLimit: 5,        // Lower limit for serverless
     queueLimit: 0,
+    connectTimeout: 30000,     // 30s timeout for cold starts
+    acquireTimeout: 30000,
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 0,
     // SSL: only enable when explicitly set via DB_SSL=true
-    // Filess.io does NOT require SSL on shared plans
     ...(process.env.DB_SSL === 'true' && !isPlanetScale && {
         ssl: { rejectUnauthorized: false }
     }),

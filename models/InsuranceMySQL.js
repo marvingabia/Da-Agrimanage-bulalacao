@@ -80,23 +80,55 @@ export class Insurance {
         try {
             const fields = [];
             const values = [];
-            
-            // Build dynamic update query
-            Object.keys(data).forEach(key => {
-                fields.push(`${key} = ?`);
-                values.push(data[key]);
-            });
-            
+            Object.keys(data).forEach(key => { fields.push(`${key} = ?`); values.push(data[key]); });
             values.push(id);
-            
-            await pool.query(
-                `UPDATE insurance SET ${fields.join(', ')} WHERE id = ?`,
-                values
-            );
-            
+            await pool.query(`UPDATE insurance SET ${fields.join(', ')} WHERE id = ?`, values);
             return await Insurance.findById(id);
         } catch (error) {
             console.error('Error updating insurance:', error);
+            throw error;
+        }
+    }
+
+    async delete() {
+        const pool = requirePool();
+        try {
+            await pool.query('DELETE FROM insurance WHERE id = ?', [this.id]);
+            return true;
+        } catch (error) {
+            console.error('Error deleting insurance:', error);
+            throw error;
+        }
+    }
+
+    async updateStatus(status, approvedBy, notes, policyNumber) {
+        const pool = requirePool();
+        try {
+            await pool.query(
+                `UPDATE insurance SET status = ?, approvalNotes = ?, approvedBy = ?, approvedAt = NOW(), updatedAt = NOW() WHERE id = ?`,
+                [status, notes, approvedBy, this.id]
+            );
+            this.status = status;
+            return this;
+        } catch (error) {
+            console.error('Error updating insurance status:', error);
+            throw error;
+        }
+    }
+
+    generatePolicyNumber() {
+        return `POL-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+    }
+
+    static async getStats() {
+        const pool = requirePool();
+        try {
+            const [rows] = await pool.query(`SELECT status, COUNT(*) as count FROM insurance GROUP BY status`);
+            const stats = { total: 0, pending: 0, approved: 0, rejected: 0 };
+            rows.forEach(r => { stats[r.status] = r.count; stats.total += r.count; });
+            return stats;
+        } catch (error) {
+            console.error('Error getting insurance stats:', error);
             throw error;
         }
     }

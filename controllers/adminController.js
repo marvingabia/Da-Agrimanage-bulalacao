@@ -3,13 +3,12 @@
     Handles admin-specific operations
 */
 
-// Note: These imports are not used directly, models are imported dynamically where needed
-// import { User } from "../models/UserMySQL.js";
-// import { Inventory } from "../models/InventoryMySQL.js";
-// import { Claim } from "../models/ClaimMySQL.js";
-// import { DamageReport } from "../models/DamageReportMySQL.js";
-// import { Insurance } from "../models/InsuranceMySQL.js";
-// import { Announcement } from "../models/AnnouncementMySQL.js";
+import { User } from "../models/UserMySQL.js";
+import { Inventory } from "../models/InventoryMySQL.js";
+import { Claim } from "../models/ClaimMySQL.js";
+import { DamageReport } from "../models/DamageReportMySQL.js";
+import { Insurance } from "../models/InsuranceMySQL.js";
+import { Announcement } from "../models/AnnouncementMySQL.js";
 
 // Get all farmers
 export const getAllFarmers = async (req, res) => {
@@ -93,8 +92,20 @@ export const updateStaff = async (req, res) => {
 
 // Delete staff member
 export const deleteStaff = async (req, res) => {
-    // TODO: Implement actual delete logic for User model
-    res.json({ success: true, message: 'Staff deleted (mock)' });
+    try {
+        const { id } = req.params;
+        const { User } = await import('../models/UserMySQL.js');
+        const staff = await User.findById(id);
+        if (!staff || staff.role !== 'staff') {
+            return res.status(404).json({ success: false, error: 'Staff member not found' });
+        }
+        await User.delete(id);
+        console.log(`🗑️ Staff deleted: ${staff.name} (${staff.email})`);
+        res.json({ success: true, message: `${staff.name} has been deleted.` });
+    } catch (error) {
+        console.error('Error deleting staff:', error);
+        res.status(500).json({ success: false, error: 'Failed to delete staff member' });
+    }
 };
 
 // Create new staff member
@@ -436,22 +447,13 @@ export const rejectStaff = async (req, res) => {
 export const approveFarmer = async (req, res) => {
     try {
         const { id } = req.params;
-        // Logic is now inside this controller
-        const { registeredUsers, localUsers } = await import('./authController.js');
-        const farmer = registeredUsers.find(user => user.id === id && user.role === 'farmer');
+        const farmer = await User.findById(id);
 
-        if (!farmer) {
+        if (!farmer || farmer.role !== 'farmer') {
             return res.status(404).json({ success: false, message: 'Farmer not found' });
         }
 
-        farmer.approved = true;
-        farmer.approvedDate = new Date().toISOString();
-
-        if (localUsers.has(farmer.email)) {
-            const localUser = localUsers.get(farmer.email);
-            localUser.approved = true;
-        }
-
+        await User.update(id, { isApproved: true, status: 'active' });
         res.json({ success: true, message: `Farmer ${farmer.name} has been approved.` });
     } catch (error) {
         console.error('Error approving farmer:', error);
@@ -464,18 +466,14 @@ export const rejectFarmer = async (req, res) => {
     try {
         const { id } = req.params;
         const { reason } = req.body;
-        const { registeredUsers } = await import('./authController.js');
-        const farmer = registeredUsers.find(user => user.id === id && user.role === 'farmer');
+        const farmer = await User.findById(id);
 
-        if (!farmer) {
+        if (!farmer || farmer.role !== 'farmer') {
             return res.status(404).json({ success: false, message: 'Farmer not found' });
         }
 
-        farmer.approved = false;
-        farmer.rejected = true;
-        farmer.rejectionReason = reason || 'No reason provided';
-        farmer.rejectedDate = new Date().toISOString();
-
+        await User.delete(id);
+        console.log(`Farmer rejected: ${farmer.name}. Reason: ${reason || 'No reason provided'}`);
         res.json({ success: true, message: `Farmer ${farmer.name} has been rejected.` });
     } catch (error) {
         console.error('Error rejecting farmer:', error);

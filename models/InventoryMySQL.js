@@ -96,6 +96,30 @@ export class Inventory {
             throw error;
         }
     }
+
+    async delete() {
+        const pool = requirePool();
+        try {
+            await pool.query('DELETE FROM inventory WHERE id = ?', [this.id]);
+            return true;
+        } catch (error) {
+            console.error('Error deleting inventory item:', error);
+            throw error;
+        }
+    }
+
+    static async getStats() {
+        const pool = requirePool();
+        try {
+            const [rows] = await pool.query(`SELECT status, COUNT(*) as count FROM inventory GROUP BY status`);
+            const stats = { total: 0, available: 0, low_stock: 0, out_of_stock: 0 };
+            rows.forEach(r => { stats[r.status] = r.count; stats.total += r.count; });
+            return stats;
+        } catch (error) {
+            console.error('Error getting inventory stats:', error);
+            throw error;
+        }
+    }
 }
 
 export default Inventory;

@@ -85,6 +85,45 @@ export class Claim {
             throw error;
         }
     }
+
+    async delete() {
+        const pool = requirePool();
+        try {
+            await pool.query('DELETE FROM claims WHERE id = ?', [this.id]);
+            return true;
+        } catch (error) {
+            console.error('Error deleting claim:', error);
+            throw error;
+        }
+    }
+
+    async updateStatus(status, reviewedBy, notes) {
+        const pool = requirePool();
+        try {
+            await pool.query(
+                `UPDATE claims SET status = ?, approvalNotes = ?, approvedBy = ?, approvedAt = NOW(), updatedAt = NOW() WHERE id = ?`,
+                [status, notes, reviewedBy, this.id]
+            );
+            this.status = status;
+            return this;
+        } catch (error) {
+            console.error('Error updating claim status:', error);
+            throw error;
+        }
+    }
+
+    static async getStats() {
+        const pool = requirePool();
+        try {
+            const [rows] = await pool.query(`SELECT status, COUNT(*) as count FROM claims GROUP BY status`);
+            const stats = { total: 0, pending: 0, approved: 0, rejected: 0, claimed: 0 };
+            rows.forEach(r => { stats[r.status] = r.count; stats.total += r.count; });
+            return stats;
+        } catch (error) {
+            console.error('Error getting claim stats:', error);
+            throw error;
+        }
+    }
 }
 
 export default Claim;

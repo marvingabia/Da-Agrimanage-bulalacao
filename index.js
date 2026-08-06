@@ -23,6 +23,7 @@
     SOFTWARE.
     */
     
+import 'dotenv/config';
 import express from "express";
 import path from "path";
 import session from "express-session";
@@ -42,13 +43,14 @@ const __dirname = dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Initialize MySQL Database Connection (with fallback)
+// Initialize MySQL Database Connection — required, no fallback on Vercel
 try {
     await initDatabase();
     console.log('✅ MySQL database initialized successfully');
 } catch (error) {
-    console.log('⚠️  MySQL not available, running in fallback mode');
-    console.log('📝 System will use local storage for now');
+    console.error('❌ MySQL connection failed:', error.message);
+    // On Vercel, we must have a DB. Log the error but continue — 
+    // individual requests will fail gracefully with 500 errors.
 }
 
 app.use(express.json({ limit: '50mb' }));
@@ -56,13 +58,51 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(path.join(process.cwd(), "public")));
 
 // ── Sessions ─────────────────────────────────────────────────────────────────
-// Use in-memory sessions (works reliably on Vercel serverless)
-// MySQL session store causes issues with IP restrictions on cloud DB providers
+// MySQL session store — required for Vercel (serverless has no shared memory)
+let sessionStore;
+const pool = getPool();
+if (pool) {
+    try {
+        const MySQLStore = MySQLStoreFactory(session);
+        sessionStore = new MySQLStore({
+            expiration: 24 * 60 * 60 * 1000,
+            createDatabaseTable: true,
+            clearExpired: true,
+            checkExpirationInterval: 900000, // 15 minutes
+            schema: {
+                tableName: 'sessions',
+                columnNames: {
+                    session_id: 'session_id',
+                    expires: 'expires',
+                    data: 'data'
+                }
+            }
+        }, pool);
+        console.log('✅ MySQL session store initialized');
+    } catch (sessionStoreError) {
+        console.error('❌ Session store setup failed:', sessionStoreError.message);
+        sessionStore = undefined;
+    }
+} else {
+    console.error('❌ No MySQL pool available — sessions will not persist across Vercel instances!');
+    // Try to get pool again after init (race condition fix)
+    try {
+        const retryPool = getPool();
+        if (retryPool) {
+            const MySQLStore = MySQLStoreFactory(session);
+            sessionStore = new MySQLStore({ expiration: 24 * 60 * 60 * 1000, createDatabaseTable: true }, retryPool);
+            console.log('✅ MySQL session store initialized (retry)');
+        }
+    } catch (e) {
+        console.error('❌ Session store retry failed:', e.message);
+    }
+}
 
 app.use(session({
     secret: process.env.SESSION_SECRET || 'xianfire-secret-key-change-in-production',
     resave: false,
     saveUninitialized: false,
+    store: sessionStore || undefined,
     cookie: {
         secure: process.env.NODE_ENV === 'production',
         httpOnly: true,
@@ -71,8 +111,6 @@ app.use(session({
     },
     proxy: process.env.NODE_ENV === 'production'
 }));
-
-console.log('✅ Session store initialized (in-memory)');
 
 // Initialize Passport for Google OAuth
 configurePassport();

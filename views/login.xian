@@ -1058,29 +1058,73 @@
         }
         
         // Handle registration form submissions
-        document.getElementById('farmerRegisterForm').addEventListener('submit', function(e) {
-            const submitBtn = this.querySelector('button[type="submit"]');
-            
+        document.getElementById('farmerRegisterForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const form = this;
+            const submitBtn = form.querySelector('button[type="submit"]');
+
             // Validate password match
             if (farmerPassword && farmerConfirmPassword && farmerPassword.value !== farmerConfirmPassword.value) {
-                e.preventDefault();
-                
-                alert('Password Mismatch!\n\nYour passwords do not match. Please make sure both password fields are the same.');
-                
+                farmerPasswordError.style.display = 'block';
                 farmerConfirmPassword.focus();
                 return;
             }
-            
+            farmerPasswordError.style.display = 'none';
+
+            const registeredEmail = form.querySelector('input[name="email"]').value;
+            const registeredName  = form.querySelector('input[name="name"]').value;
+
+            // Loading state
+            const orig = submitBtn.innerHTML;
             submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Creating Account...';
             submitBtn.disabled = true;
-            
-            // Show loading message
-            const loadingMsg = document.createElement('div');
-            loadingMsg.className = 'text-center mt-2';
-            loadingMsg.style.color = 'rgba(255, 255, 255, 0.8)';
-            loadingMsg.style.fontSize = '0.9rem';
-            loadingMsg.innerHTML = 'Creating your farmer account. You will need to login after registration...';
-            submitBtn.parentNode.appendChild(loadingMsg);
+
+            const data = new URLSearchParams(new FormData(form));
+
+            try {
+                const res  = await fetch('/register', { method: 'POST', body: data });
+                const html = await res.text();
+
+                const parser = new DOMParser();
+                const doc    = parser.parseFromString(html, 'text/html');
+                const error  = doc.querySelector('.alert.error');
+
+                if (!error) {
+                    // Success — close modal, show popup, pre-fill email
+                    closeModal('farmerModal');
+                    form.reset();
+
+                    // Pre-fill email in login form and switch to Farmer tab
+                    document.getElementById('email').value = registeredEmail;
+                    document.querySelectorAll('.role-tab').forEach(t => t.classList.remove('active'));
+                    document.querySelector('.role-tab[data-role="farmer"]').classList.add('active');
+                    document.getElementById('selectedRole').value = 'farmer';
+
+                    // Show success popup
+                    showRegistrationSuccessPopup(
+                        '🎉 Registration Successful!',
+                        `Welcome, <strong>${registeredName}</strong>!<br>Your farmer account has been created.<br>Your email <strong>${registeredEmail}</strong> is now pre-filled below — just enter your password to login.`,
+                        'farmer'
+                    );
+                } else {
+                    // Show error inside modal
+                    let errBox = form.querySelector('.reg-error-box');
+                    if (!errBox) {
+                        errBox = document.createElement('div');
+                        errBox.className = 'reg-error-box';
+                        errBox.style.cssText = 'background:rgba(220,53,69,0.2);border:1px solid rgba(220,53,69,0.4);border-radius:10px;padding:0.75rem 1rem;color:#fca5a5;margin-bottom:1rem;font-size:0.9rem;';
+                        form.prepend(errBox);
+                    }
+                    errBox.textContent = error.textContent.trim();
+                    errBox.style.display = 'block';
+                }
+            } catch (err) {
+                console.error(err);
+            } finally {
+                submitBtn.innerHTML = orig;
+                submitBtn.disabled = false;
+            }
         });
         
         // Staff password validation
@@ -1149,22 +1193,41 @@
 
                 if (success || res.url.includes('/dashboard')) {
                     // Close modal & show toast
+                    const registeredEmail = form.querySelector('input[name="email"]').value;
+                    const registeredName  = form.querySelector('input[name="name"]').value;
                     closeModal('staffModal');
                     form.reset();
-                    setTimeout(() => showLoginToast(
-                        'Registration submitted! Your account is pending admin approval. You will be notified once approved.',
-                        'success'
+
+                    // Pre-fill email in login form and switch to Staff tab
+                    document.getElementById('email').value = registeredEmail;
+                    document.querySelectorAll('.role-tab').forEach(t => t.classList.remove('active'));
+                    document.querySelector('.role-tab[data-role="staff"]').classList.add('active');
+                    document.getElementById('selectedRole').value = 'staff';
+
+                    setTimeout(() => showRegistrationSuccessPopup(
+                        '✅ Registration Submitted!',
+                        `Thank you, <strong>${registeredName}</strong>!<br>Your staff account is <strong>pending admin approval</strong>.<br>You will be able to login once an administrator approves your account.<br><br>Email: <strong>${registeredEmail}</strong>`,
+                        'staff'
                     ), 200);
                 } else if (error) {
                     errMsg.textContent = error.textContent.trim();
                     errBox.style.display = 'block';
                 } else {
-                    // Unknown response — show generic success (server likely redirected)
+                    // Unknown response — show generic success
+                    const registeredEmail = form.querySelector('input[name="email"]').value;
+                    const registeredName  = form.querySelector('input[name="name"]').value;
                     closeModal('staffModal');
                     form.reset();
-                    setTimeout(() => showLoginToast(
-                        'Registration submitted! Waiting for admin approval before you can login.',
-                        'success'
+
+                    document.getElementById('email').value = registeredEmail;
+                    document.querySelectorAll('.role-tab').forEach(t => t.classList.remove('active'));
+                    document.querySelector('.role-tab[data-role="staff"]').classList.add('active');
+                    document.getElementById('selectedRole').value = 'staff';
+
+                    setTimeout(() => showRegistrationSuccessPopup(
+                        '✅ Registration Submitted!',
+                        `Thank you, <strong>${registeredName}</strong>!<br>Your staff account is <strong>pending admin approval</strong>.<br>Email: <strong>${registeredEmail}</strong>`,
+                        'staff'
                     ), 200);
                 }
             } catch (err) {
@@ -1528,6 +1591,94 @@
                 toast.style.animation = 'toastOut 0.35s ease forwards';
                 setTimeout(() => toast.remove(), 350);
             }, 6000);
+        }
+
+        // Registration Success Popup
+        function showRegistrationSuccessPopup(title, message, role) {
+            // Remove existing popup if any
+            const existing = document.getElementById('reg-success-popup');
+            if (existing) existing.remove();
+
+            const isFarmer = role === 'farmer';
+            const color    = isFarmer ? '#10b981' : '#6366f1';
+            const icon     = isFarmer ? 'fa-leaf' : 'fa-user-tie';
+
+            const popup = document.createElement('div');
+            popup.id = 'reg-success-popup';
+            popup.style.cssText = `
+                position:fixed; inset:0; z-index:99999;
+                background:rgba(0,0,0,0.55); backdrop-filter:blur(4px);
+                display:flex; align-items:center; justify-content:center;
+                padding:1rem;
+                animation:fadeInOverlay 0.3s ease;
+            `;
+            popup.innerHTML = `
+                <div style="
+                    background:#fff; border-radius:20px; padding:2rem 2.25rem;
+                    max-width:420px; width:100%; text-align:center;
+                    box-shadow:0 25px 60px rgba(0,0,0,0.3);
+                    animation:popupIn 0.4s cubic-bezier(0.34,1.56,0.64,1);
+                ">
+                    <div style="
+                        width:72px;height:72px;border-radius:50%;
+                        background:${isFarmer ? '#dcfce7' : '#ede9fe'};
+                        display:flex;align-items:center;justify-content:center;
+                        margin:0 auto 1rem auto;
+                    ">
+                        <i class="fas ${icon}" style="font-size:2rem;color:${color};"></i>
+                    </div>
+                    <h3 style="font-size:1.3rem;font-weight:700;color:#111827;margin-bottom:0.75rem;">${title}</h3>
+                    <p style="color:#374151;font-size:0.95rem;line-height:1.6;margin-bottom:1.5rem;">${message}</p>
+                    ${isFarmer ? `
+                    <p style="color:#6b7280;font-size:0.85rem;margin-bottom:1.25rem;">
+                        <i class="fas fa-info-circle me-1" style="color:${color};"></i>
+                        Your email has been pre-filled in the login form.
+                    </p>` : `
+                    <div style="
+                        background:#ede9fe;border-radius:10px;padding:0.75rem 1rem;
+                        color:#5b21b6;font-size:0.85rem;margin-bottom:1.25rem;
+                        border-left:4px solid #7c3aed;
+                    ">
+                        <i class="fas fa-clock me-1"></i>
+                        Your email is pre-filled. You can login <strong>after admin approves</strong> your account.
+                    </div>`}
+                    <button onclick="document.getElementById('reg-success-popup').remove(); document.getElementById('password').focus();"
+                        style="
+                            background:${color};color:#fff;border:none;border-radius:25px;
+                            padding:0.75rem 2rem;font-size:1rem;font-weight:600;
+                            cursor:pointer;width:100%;transition:opacity 0.2s;
+                        "
+                        onmouseover="this.style.opacity='0.85'"
+                        onmouseout="this.style.opacity='1'"
+                    >
+                        <i class="fas fa-sign-in-alt me-2"></i>Go to Login
+                    </button>
+                </div>
+            `;
+
+            // Add animations
+            if (!document.getElementById('reg-popup-styles')) {
+                const s = document.createElement('style');
+                s.id = 'reg-popup-styles';
+                s.textContent = `
+                    @keyframes fadeInOverlay { from{opacity:0} to{opacity:1} }
+                    @keyframes popupIn {
+                        from{opacity:0;transform:scale(0.85) translateY(20px)}
+                        to{opacity:1;transform:scale(1) translateY(0)}
+                    }
+                `;
+                document.head.appendChild(s);
+            }
+
+            // Close on backdrop click
+            popup.addEventListener('click', function(e) {
+                if (e.target === popup) {
+                    popup.remove();
+                    document.getElementById('password').focus();
+                }
+            });
+
+            document.body.appendChild(popup);
         }
         
         // Auto-focus email input and handle registered users

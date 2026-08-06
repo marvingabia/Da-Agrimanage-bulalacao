@@ -328,7 +328,26 @@ window.loadStaffManagement = function() {
     console.log('📋 Loading Staff Management section...');
     loadPendingStaff();
     loadApprovedStaff();
+    startPendingStaffPolling();
 };
+
+// Auto-poll every 15 seconds for new pending staff registrations
+let pendingStaffPollInterval = null;
+
+function startPendingStaffPolling() {
+    if (pendingStaffPollInterval) clearInterval(pendingStaffPollInterval);
+    pendingStaffPollInterval = setInterval(() => {
+        console.log('🔄 Auto-refreshing pending staff...');
+        loadPendingStaff();
+    }, 15000);
+}
+
+function stopPendingStaffPolling() {
+    if (pendingStaffPollInterval) {
+        clearInterval(pendingStaffPollInterval);
+        pendingStaffPollInterval = null;
+    }
+}
 
 function loadPendingStaff() {
     console.log('📋 Loading pending staff...');
