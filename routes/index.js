@@ -183,6 +183,19 @@ router.get("/settings", requireAuth, (req, res) => {
 });
 router.get("/logout", logoutUser);
 
+// Temporary debug route — shows DB config (remove after fixing)
+router.get("/debug-db", (req, res) => {
+    res.json({
+        DB_HOST: process.env.DB_HOST || 'NOT SET',
+        DB_PORT: process.env.DB_PORT || 'NOT SET',
+        DB_USER: process.env.DB_USER || 'NOT SET',
+        DB_NAME: process.env.DB_NAME || 'NOT SET',
+        DB_SSL: process.env.DB_SSL || 'NOT SET',
+        DB_PASSWORD_SET: process.env.DB_PASSWORD ? 'YES (hidden)' : 'NOT SET',
+        NODE_ENV: process.env.NODE_ENV || 'NOT SET',
+    });
+});
+
 // All section navigation is now handled by the enhanced dashboard SPA
 // No separate page routes needed - everything is modal-based
 
