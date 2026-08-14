@@ -198,6 +198,17 @@ export class Benefit {
             throw error;
         }
     }
+
+    static async delete(id) {
+        const pool = requirePool();
+        try {
+            const [result] = await pool.query('DELETE FROM benefits WHERE id = ?', [id]);
+            return result.affectedRows > 0;
+        } catch (error) {
+            console.error('Error deleting benefit:', error);
+            throw error;
+        }
+    }
 }
 
 export default Benefit;

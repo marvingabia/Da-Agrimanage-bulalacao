@@ -68,10 +68,8 @@ import {
     getFarmerData,
     submitClaim,
     submitDamageReport,
-    applyInsurance,
     getFarmerClaims,
     getFarmerDamageReports,
-    getFarmerInsurance,
     getFarmerAnnouncements,
     submitRequestLetter,
     getFarmerRequestLetters
@@ -276,7 +274,6 @@ router.delete("/api/admin/delete-damage-report/:reportId", requireRole(['admin']
 router.get("/api/farmer/data", requireRole(['farmer']), getFarmerData);
 router.post("/api/farmer/claims", requireRole(['farmer']), submitClaim);
 router.post("/api/farmer/damage-reports", requireRole(['farmer']), submitDamageReport);
-router.post("/api/farmer/insurance", requireRole(['farmer']), applyInsurance);
 router.get("/api/farmer/claims", requireRole(['farmer']), getFarmerClaims);
 router.get("/api/farmer/damage-reports", requireRole(['farmer']), getFarmerDamageReports);
 
@@ -302,7 +299,6 @@ router.post("/api/farmer/damage-report/:reportId/photos", requireRole(['farmer']
         res.status(500).json({ success: false, error: 'Failed to update photos: ' + error.message });
     }
 });
-router.get("/api/farmer/insurance", requireRole(['farmer']), getFarmerInsurance);
 router.get("/api/farmer/announcements", requireRole(['farmer']), getFarmerAnnouncements);
 router.post("/api/farmer/request-letters", requireRole(['farmer']), submitRequestLetter);
 router.get("/api/farmer/request-letters", requireRole(['farmer']), getFarmerRequestLetters);
@@ -338,8 +334,8 @@ router.get("/api/damage-reports/:id", requireAuth, async (req, res) => {
 // Insurance API routes (accessible by all authenticated users)
 router.get("/api/insurance", requireAuth, async (req, res) => {
     try {
-        const { Insurance } = await import("../models/InsuranceMySQL.js");
-        const insurance = await Insurance.findAll();
+        const { Benefit } = await import("../models/BenefitMySQL.js");
+        const insurance = await Benefit.findAll();
         res.json({ success: true, insurance });
     } catch (error) {
         console.error('Error getting insurance:', error);
@@ -349,8 +345,8 @@ router.get("/api/insurance", requireAuth, async (req, res) => {
 
 router.get("/api/insurance/:id", requireAuth, async (req, res) => {
     try {
-        const { Insurance } = await import("../models/InsuranceMySQL.js");
-        const insurance = await Insurance.findById(req.params.id);
+        const { Benefit } = await import("../models/BenefitMySQL.js");
+        const insurance = await Benefit.findById(req.params.id);
         if (!insurance) {
             return res.status(404).json({ success: false, error: 'Insurance application not found' });
         }
@@ -364,10 +360,10 @@ router.get("/api/insurance/:id", requireAuth, async (req, res) => {
 // Staff routes for insurance approval
 router.post("/api/staff/insurance/:id/approve", requireRole(['staff', 'admin']), async (req, res) => {
     try {
-        const { Insurance } = await import("../models/InsuranceMySQL.js");
+        const { Benefit } = await import("../models/BenefitMySQL.js");
         const { approvalNotes } = req.body;
         
-        await Insurance.update(req.params.id, {
+        await Benefit.update(req.params.id, {
             status: 'approved',
             approvalNotes: approvalNotes || 'Approved by staff',
             approvedBy: req.session.userId,
@@ -383,10 +379,10 @@ router.post("/api/staff/insurance/:id/approve", requireRole(['staff', 'admin']),
 
 router.post("/api/staff/insurance/:id/reject", requireRole(['staff', 'admin']), async (req, res) => {
     try {
-        const { Insurance } = await import("../models/InsuranceMySQL.js");
+        const { Benefit } = await import("../models/BenefitMySQL.js");
         const { approvalNotes } = req.body;
         
-        await Insurance.update(req.params.id, {
+        await Benefit.update(req.params.id, {
             status: 'rejected',
             approvalNotes: approvalNotes || 'Rejected by staff',
             approvedBy: req.session.userId,
@@ -699,15 +695,13 @@ router.get("/api/analytics", requireAuth, async (req, res) => {
         const { Inventory } = await import("../models/InventoryMySQL.js");
         const { Benefit } = await import("../models/BenefitMySQL.js");
         const { DamageReport } = await import("../models/DamageReportMySQL.js");
-        const { Insurance } = await import("../models/InsuranceMySQL.js");
         
         // Get data
-        const [farmers, inventory, benefits, reports, insurance] = await Promise.all([
+        const [farmers, inventory, benefits, reports] = await Promise.all([
             User.findByRole('farmer'),
             Inventory.findAll(),
             Benefit.findAll(),
-            DamageReport.findAll(),
-            Insurance.findAll()
+            DamageReport.findAll()
         ]);
         
         // Calculate metrics
@@ -737,11 +731,6 @@ router.get("/api/analytics", requireAuth, async (req, res) => {
             ],
             benefitsLabels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
             benefitsData: [2, 5, 8, benefits.length],
-            insuranceData: [
-                insurance.filter(i => i.status === 'approved').length,
-                insurance.filter(i => i.status === 'pending').length,
-                insurance.filter(i => i.status === 'rejected').length
-            ],
             damageLabels: ['Typhoon', 'Flood', 'Drought', 'Pest'],
             damageData: [5, 3, 2, 4]
         };
@@ -1013,13 +1002,13 @@ router.post("/api/staff/notifications/clear", requireRole(['staff', 'admin']), a
 router.get("/api/dashboard/stats", requireAuth, async (req, res) => {
     try {
         const { User } = await import("../models/UserMySQL.js");
-        const { Insurance } = await import("../models/InsuranceMySQL.js");
+        const { Benefit } = await import("../models/BenefitMySQL.js");
         const { Claim } = await import("../models/ClaimMySQL.js");
         const { Inventory } = await import("../models/InventoryMySQL.js");
         
-        const [farmers, insurance, claims, inventory] = await Promise.all([
+        const [farmers, benefits, claims, inventory] = await Promise.all([
             User.findByRole('farmer'),
-            Insurance.findAll(),
+            Benefit.findAll(),
             Claim.findAll(),
             Inventory.findAll()
         ]);
@@ -1027,7 +1016,7 @@ router.get("/api/dashboard/stats", requireAuth, async (req, res) => {
         res.json({
             success: true,
             totalFarmers: farmers.length,
-            pendingInsurance: insurance.filter(i => i.status === 'pending').length,
+            pendingInsurance: benefits.filter(i => i.status === 'pending').length,
             pendingClaims: claims.filter(c => c.status === 'pending').length,
             totalInventory: inventory.length
         });
@@ -1043,9 +1032,9 @@ router.get("/api/dashboard/recent-activity", requireAuth, async (req, res) => {
         const activities = [];
         
         // Get recent insurance applications
-        const { Insurance } = await import("../models/InsuranceMySQL.js");
-        const insurance = await Insurance.findAll();
-        insurance.slice(0, 3).forEach(ins => {
+        const { Benefit } = await import("../models/BenefitMySQL.js");
+        const benefits = await Benefit.findAll();
+        benefits.slice(0, 3).forEach(ins => {
             activities.push({
                 id: ins.id,
                 type: 'insurance',
@@ -1408,7 +1397,116 @@ router.get("/partials/request-letters", requireAuth, (req, res) => {
     });
 });
 
+// ══════════════════════════════════════════════════════════
+//  AI Vision Analysis Endpoint
+// ══════════════════════════════════════════════════════════
+router.post("/api/ai/analyze-crop", requireAuth, async (req, res) => {
+    try {
+        const { image } = req.body;
+        
+        if (!image) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'No image provided' 
+            });
+        }
+
+        // Import AI service
+        const { analyzeImageWithAI } = await import('../services/aiVisionService.js');
+        
+        // Call Google Vision API
+        const analysis = await analyzeImageWithAI(image);
+        
+        if (!analysis) {
+            // Fallback to local analysis if API fails
+            return res.json({
+                success: true,
+                usedFallback: true,
+                message: 'Using local analysis (API not configured)',
+                analysis: {
+                    isPlant: true,
+                    cropType: 'Unknown',
+                    condition: 'Unable to detect',
+                    confidence: 50
+                }
+            });
+        }
+
+        res.json({
+            success: true,
+            usedFallback: false,
+            analysis: analysis
+        });
+    } catch (error) {
+        console.error('Error in AI analysis:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: 'Failed to analyze image' 
+        });
+    }
+});
+
+// ══════════════════════════════════════════════════════════
+//  Test Google Vision API Endpoint
+// ══════════════════════════════════════════════════════════
+router.get("/api/ai/test", requireAuth, async (req, res) => {
+    try {
+        const apiKey = process.env.GOOGLE_VISION_API_KEY;
+        
+        if (!apiKey || apiKey === 'your-google-vision-api-key-here') {
+            return res.json({
+                success: false,
+                message: 'Google Vision API key not configured in .env file',
+                configured: false
+            });
+        }
+
+        // Test with a simple 1x1 pixel white PNG
+        const testImage = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
+        
+        const testRequest = {
+            requests: [{
+                image: { content: testImage },
+                features: [{ type: 'LABEL_DETECTION', maxResults: 1 }]
+            }]
+        };
+
+        const response = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(testRequest)
+        });
+
+        const responseText = await response.text();
+        let data;
+        try {
+            data = JSON.parse(responseText);
+        } catch {
+            data = { rawResponse: responseText };
+        }
+
+        res.json({
+            success: response.ok,
+            status: response.status,
+            statusText: response.statusText,
+            configured: true,
+            apiKeyPreview: apiKey.substring(0, 20) + '...',
+            response: data,
+            message: response.ok 
+                ? '✅ Google Vision API is working!' 
+                : '❌ API key validation failed. Check console for details.'
+        });
+    } catch (error) {
+        res.json({
+            success: false,
+            error: error.message,
+            message: '❌ Failed to test Google Vision API'
+        });
+    }
+});
+
 export default router;
+
 
 
 // ============================================

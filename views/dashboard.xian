@@ -60,11 +60,6 @@
                         <!-- Farmer Menu -->
                         {{#if (eq user.role 'farmer')}}
                         <li class="nav-item">
-                            <a class="nav-link text-white" href="#" onclick="showSection('insurance')" id="nav-insurance">
-                                <i class="fas fa-shield-alt me-2"></i>Insurance
-                            </a>
-                        </li>
-                        <li class="nav-item">
                             <a class="nav-link text-white" href="#" onclick="showSection('damage-reports')" id="nav-damage-reports">
                                 <i class="fas fa-exclamation-triangle me-2"></i>Damage Reports
                             </a>
@@ -92,12 +87,6 @@
                             <a class="nav-link text-white" href="#" onclick="showSection('farmers-list')" id="nav-farmers-list">
                                 <i class="fas fa-users me-2"></i>Farmers
                                 <span class="badge bg-primary rounded-pill float-end" id="sidebar-farmers-count">0</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link text-white" href="#" onclick="showSection('insurance')" id="nav-insurance">
-                                <i class="fas fa-shield-alt me-2"></i>Insurance
-                                <span class="badge bg-info rounded-pill float-end" id="sidebar-insurance-count">0</span>
                             </a>
                         </li>
                         <li class="nav-item">
@@ -163,10 +152,6 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link text-white" href="#" onclick="showSection('insurance')" id="nav-insurance">
-                                <i class="fas fa-shield-alt me-2"></i>Insurance
-                                <span class="badge bg-info rounded-pill float-end" id="sidebar-insurance-count">0</span>
-                            </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link text-white" href="#" onclick="showSection('damage-reports')" id="nav-damage-reports">
@@ -280,16 +265,7 @@
                 <div id="dashboard-section">
                     <div class="row">
                         {{#if (eq user.role 'farmer')}}
-                        <div class="col-md-4 mb-4">
-                            <div class="card">
-                                <div class="card-body">
-                                    <h5 class="card-title"><i class="fas fa-shield-alt text-primary"></i> Insurance</h5>
-                                    <p class="card-text display-6" id="insurance-count">0</p>
-                                    <p class="text-muted">Applications</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-4 mb-4">
+                        <div class="col-md-6 mb-4">
                             <div class="card">
                                 <div class="card-body">
                                     <h5 class="card-title"><i class="fas fa-file-alt text-success"></i> Damage Reports</h5>
@@ -298,7 +274,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-4 mb-4">
+                        <div class="col-md-6 mb-4">
                             <div class="card">
                                 <div class="card-body">
                                     <h5 class="card-title"><i class="fas fa-envelope text-info"></i> Request Letters</h5>
@@ -316,15 +292,6 @@
                                     <h5 class="card-title"><i class="fas fa-users text-primary"></i> Farmers</h5>
                                     <p class="card-text display-6" id="farmers-count">{{stats.totalFarmers}}</p>
                                     <p class="text-muted">Registered</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-3 mb-4">
-                            <div class="card">
-                                <div class="card-body">
-                                    <h5 class="card-title"><i class="fas fa-shield-alt text-success"></i> Insurance</h5>
-                                    <p class="card-text display-6" id="insurance-count">0</p>
-                                    <p class="text-muted">Applications</p>
                                 </div>
                             </div>
                         </div>
@@ -416,16 +383,6 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-4 mb-4">
-                            <div class="dashboard-chart-card">
-                                <div class="chart-card-header">
-                                    <h6><i class="fas fa-chart-pie me-2 text-success"></i>Insurance Status</h6>
-                                </div>
-                                <div class="chart-card-body">
-                                    <canvas id="dash-insurance-chart"></canvas>
-                                </div>
-                            </div>
-                        </div>
                         <div class="col-md-6 mb-4">
                             <div class="dashboard-chart-card">
                                 <div class="chart-card-header">
@@ -450,11 +407,6 @@
                     </div>
                 </div>
 
-                <!-- Insurance Section -->
-                <div id="insurance-section" style="display:none;">
-                    {{> insurance}}
-                </div>
-                
                 <!-- Damage Reports Section -->
                 <div id="damage-reports-section" style="display:none;">
                     {{> damage-reports}}
@@ -589,9 +541,6 @@
                     if (section === 'damage-reports' && typeof loadDamageReportsSafe === 'function') {
                         console.log('🌾 Loading damage reports...');
                         loadDamageReportsSafe();
-                    } else if (section === 'insurance' && typeof loadInsurance === 'function') {
-                        console.log('??? Loading insurance...');
-                        loadInsurance();
                     } else if (section === 'claims' && typeof loadClaims === 'function') {
                         console.log('?? Loading claims...');
                         loadClaims();
@@ -648,22 +597,6 @@
             
             console.log('?? Loading dashboard data for', userRole, userId);
             
-            // Load insurance count
-            fetch('/api/insurance')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        const insuranceCount = userRole === 'farmer' 
-                            ? data.insurance.filter(i => i.farmerId === userId).length
-                            : data.insurance.length;
-                        const insuranceEl = document.getElementById('insurance-count');
-                        if (insuranceEl) {
-                            insuranceEl.textContent = insuranceCount;
-                            console.log('? Insurance count updated:', insuranceCount);
-                        }
-                    }
-                })
-                .catch(error => console.error('Error loading insurance:', error));
             
             // Load damage reports count
             fetch('/api/damage-reports')
@@ -1384,22 +1317,6 @@
                     options: { responsive: true, plugins: { legend: { display: false } },
                         scales: { y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } },
                                   x: { grid: { display: false } } } }
-                });
-            }
-
-            // Insurance Status
-            const ic = document.getElementById('dash-insurance-chart');
-            if (ic) {
-                dashCharts.insurance = new Chart(ic, {
-                    type: 'doughnut',
-                    data: {
-                        labels: ['Approved','Pending','Rejected'],
-                        datasets: [{ data: data.charts.insuranceData || [0,0,0],
-                            backgroundColor: ['#22c55e','#f59e0b','#ef4444'],
-                            borderWidth: 2, borderColor: '#fff' }]
-                    },
-                    options: { responsive: true, cutout: '65%',
-                        plugins: { legend: { position: 'bottom', labels: { padding: 10, font: { size: 11 } } } } }
                 });
             }
 

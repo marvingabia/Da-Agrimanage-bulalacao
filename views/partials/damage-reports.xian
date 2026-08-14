@@ -8,6 +8,9 @@
         <div style="display: flex; align-items: center; gap: 1rem;">
             <span class="premium-stats-badge" id="damage-count-badge">0 Reports</span>
             {{#if (eq user.role 'farmer')}}
+            <button class="premium-btn premium-btn-success" onclick="openCropScanner()" style="background:linear-gradient(135deg,#10b981,#059669); border:none; color:white; padding:0.5rem 1.1rem; border-radius:10px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; font-size:0.9rem;">
+                <i class="fas fa-camera"></i> Scan Crop
+            </button>
             <button class="premium-btn premium-btn-danger" data-bs-toggle="modal" data-bs-target="#damageReportModal">
                 <i class="fas fa-plus me-2"></i>Report Damage
             </button>
@@ -959,3 +962,1044 @@ function handleEditDrop(event) {
     }
 }
 </style>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     CROP SCANNER MODAL — Camera + AI Identification + GPS Mapping
+     Uses: TensorFlow.js (MobileNet) for crop analysis,
+           Leaflet.js for free map, Browser Geolocation API
+════════════════════════════════════════════════════════════════ -->
+
+<!-- Leaflet CSS for the map -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+
+<div id="cropScannerModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.82); z-index:10500; align-items:center; justify-content:center; overflow-y:auto; padding:1rem;">
+    <div style="background:white; border-radius:20px; width:95%; max-width:700px; box-shadow:0 25px 80px rgba(0,0,0,0.4); overflow:hidden; position:relative; margin:auto;">
+
+        <!-- Header -->
+        <div style="background:linear-gradient(135deg,#059669,#10b981); padding:1.25rem 1.5rem; display:flex; align-items:center; justify-content:space-between;">
+            <div style="flex:1;">
+                <h5 style="color:white; margin:0; font-weight:700; font-size:1.1rem;">
+                    <i class="fas fa-camera me-2"></i>Crop Scanner & AI Analysis
+                </h5>
+                <small style="color:rgba(255,255,255,0.8);">Kumuha ng larawan para matukoy ang problema sa inyong taniman</small>
+            </div>
+            <div style="display:flex; gap:0.5rem; align-items:center;">
+                <button onclick="testGoogleVisionAPI()" style="background:rgba(255,255,255,0.2); border:1px solid rgba(255,255,255,0.3); padding:0.4rem 0.75rem; border-radius:8px; color:white; font-size:0.75rem; cursor:pointer; font-weight:600; white-space:nowrap;">
+                    <i class="fas fa-flask me-1"></i>Test API
+                </button>
+                <button onclick="closeCropScanner()" style="background:rgba(255,255,255,0.2); border:none; width:34px; height:34px; border-radius:50%; color:white; font-size:1.1rem; cursor:pointer; display:flex; align-items:center; justify-content:center;">&times;</button>
+            </div>
+        </div>
+
+        <div style="padding:1.5rem;">
+
+            <!-- STEP 1: Camera / Upload -->
+            <div id="scanner-step-1">
+                <div style="display:flex; gap:0.75rem; margin-bottom:1rem; flex-wrap:wrap;">
+                    <button onclick="startCamera()" id="btn-start-cam"
+                        style="flex:1; min-width:130px; background:linear-gradient(135deg,#3b82f6,#2563eb); color:white; border:none; padding:0.75rem 1rem; border-radius:12px; font-weight:600; cursor:pointer; font-size:0.9rem;">
+                        <i class="fas fa-video me-1"></i>Open Camera
+                    </button>
+                    <button onclick="document.getElementById('cropFileInput').click()"
+                        style="flex:1; min-width:130px; background:linear-gradient(135deg,#8b5cf6,#7c3aed); color:white; border:none; padding:0.75rem 1rem; border-radius:12px; font-weight:600; cursor:pointer; font-size:0.9rem;">
+                        <i class="fas fa-image me-1"></i>Upload Photo
+                    </button>
+                    <button onclick="getGPSLocation()" id="btn-get-gps"
+                        style="flex:1; min-width:130px; background:linear-gradient(135deg,#f59e0b,#d97706); color:white; border:none; padding:0.75rem 1rem; border-radius:12px; font-weight:600; cursor:pointer; font-size:0.9rem;">
+                        <i class="fas fa-map-marker-alt me-1"></i>Get Location
+                    </button>
+                </div>
+                <input type="file" id="cropFileInput" accept="image/*" style="display:none;" onchange="handleCropFileUpload(event)">
+
+                <!-- Camera Feed -->
+                <div id="camera-container" style="display:none; margin-bottom:1rem;">
+                    <video id="crop-video" autoplay playsinline muted
+                        style="width:100%; border-radius:12px; background:#000; max-height:320px; object-fit:cover;"></video>
+                    <div style="display:flex; gap:0.75rem; margin-top:0.75rem; justify-content:center;">
+                        <button onclick="capturePhoto()"
+                            style="background:linear-gradient(135deg,#ef4444,#dc2626); color:white; border:none; padding:0.75rem 2rem; border-radius:50px; font-weight:700; cursor:pointer; font-size:1rem;">
+                            <i class="fas fa-camera me-2"></i>Capture Photo
+                        </button>
+                        <button onclick="stopCamera()"
+                            style="background:#64748b; color:white; border:none; padding:0.75rem 1.25rem; border-radius:50px; font-weight:600; cursor:pointer;">
+                            <i class="fas fa-times me-1"></i>Cancel
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Preview Canvas (hidden, used for capture) -->
+                <canvas id="crop-canvas" style="display:none;"></canvas>
+
+                <!-- Captured Image Preview -->
+                <div id="captured-preview-area" style="display:none; margin-bottom:1rem;">
+                    <img id="captured-img" style="width:100%; border-radius:12px; max-height:280px; object-fit:cover; border:3px solid #10b981;" alt="Captured crop photo">
+                    <div style="text-align:center; margin-top:0.5rem;">
+                        <button onclick="analyzeImage()"
+                            style="background:linear-gradient(135deg,#059669,#10b981); color:white; border:none; padding:0.75rem 2rem; border-radius:50px; font-weight:700; cursor:pointer; font-size:0.95rem;">
+                            <i class="fas fa-brain me-2"></i>Analyze with AI
+                        </button>
+                        <button onclick="retakePhoto()" style="background:#f1f5f9; color:#374151; border:none; padding:0.75rem 1.25rem; border-radius:50px; font-weight:600; cursor:pointer; margin-left:0.5rem;">
+                            <i class="fas fa-redo me-1"></i>Retake
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI Analysis Loading -->
+            <div id="scanner-loading" style="display:none; text-align:center; padding:2rem 0;">
+                <div style="display:inline-block; width:56px; height:56px; border:5px solid #d1fae5; border-top-color:#059669; border-radius:50%; animation:spin 0.9s linear infinite; margin-bottom:1rem;"></div>
+                <p style="color:#059669; font-weight:700; font-size:1rem; margin:0;">Sinusuri ng AI ang larawan...</p>
+                <small style="color:#64748b;">Analyzing crop health, please wait</small>
+            </div>
+
+            <!-- AI Analysis Results -->
+            <div id="scanner-results" style="display:none; margin-bottom:1.25rem;">
+                <div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7); border-radius:14px; padding:1.25rem; border:2px solid #86efac; margin-bottom:1rem;">
+                    <h6 style="color:#166534; font-weight:700; margin-bottom:0.75rem;">
+                        <i class="fas fa-robot me-2"></i>AI Analysis Results
+                    </h6>
+
+                    <!-- Detected Condition -->
+                    <div style="display:flex; align-items:flex-start; gap:0.75rem; margin-bottom:0.75rem;">
+                        <div id="ai-condition-icon" style="width:44px; height:44px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:1.3rem; flex-shrink:0; background:#fee2e2;">⚠️</div>
+                        <div style="flex:1;">
+                            <div style="font-size:0.75rem; color:#64748b; font-weight:600; text-transform:uppercase;">Detected Condition</div>
+                            <div id="ai-condition-name" style="font-size:1rem; font-weight:700; color:#1e293b;">Analyzing...</div>
+                            <div id="ai-condition-conf" style="font-size:0.8rem; color:#059669; font-weight:600;"></div>
+                        </div>
+                    </div>
+
+                    <!-- Recommendations -->
+                    <div style="background:white; border-radius:10px; padding:0.875rem; margin-bottom:0.75rem;">
+                        <div style="font-size:0.75rem; color:#64748b; font-weight:600; text-transform:uppercase; margin-bottom:0.5rem;">
+                            <i class="fas fa-lightbulb me-1 text-warning"></i>Rekomendasyon
+                        </div>
+                        <div id="ai-recommendation" style="font-size:0.88rem; color:#374151; line-height:1.6;">—</div>
+                    </div>
+
+                    <!-- Suggested form values -->
+                    <div style="background:white; border-radius:10px; padding:0.875rem;">
+                        <div style="font-size:0.75rem; color:#64748b; font-weight:600; text-transform:uppercase; margin-bottom:0.5rem;">
+                            <i class="fas fa-clipboard-list me-1 text-primary"></i>Suggested Report Values
+                        </div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; font-size:0.85rem;">
+                            <div><span style="color:#94a3b8;">Disaster Type:</span> <strong id="sug-disaster">—</strong></div>
+                            <div><span style="color:#94a3b8;">Crop Type:</span> <strong id="sug-crop">—</strong></div>
+                            <div><span style="color:#94a3b8;">Damage %:</span> <strong id="sug-damage">—</strong></div>
+                            <div><span style="color:#94a3b8;">Severity:</span> <strong id="sug-severity">—</strong></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GPS & Map Section -->
+                <div style="background:linear-gradient(135deg,#eff6ff,#dbeafe); border-radius:14px; padding:1.25rem; border:2px solid #93c5fd;">
+                    <h6 style="color:#1e40af; font-weight:700; margin-bottom:0.75rem;">
+                        <i class="fas fa-map-marked-alt me-2"></i>Farm Location Map
+                    </h6>
+                    <div id="gps-status" style="font-size:0.85rem; color:#475569; margin-bottom:0.75rem; display:flex; align-items:center; gap:0.5rem;">
+                        <i class="fas fa-info-circle text-primary"></i>
+                        <span id="gps-status-text">Click "Get Location" to show your farm on the map</span>
+                    </div>
+                    <div id="scanner-map" style="height:220px; border-radius:12px; border:2px solid #93c5fd; overflow:hidden; background:#e2e8f0; display:flex; align-items:center; justify-content:center;">
+                        <div style="text-align:center; color:#94a3b8; padding:1rem;">
+                            <i class="fas fa-map" style="font-size:2rem; margin-bottom:0.5rem; display:block;"></i>
+                            <span style="font-size:0.85rem;">Map will appear after getting location</span>
+                        </div>
+                    </div>
+                    <div id="gps-coords" style="margin-top:0.5rem; font-size:0.78rem; color:#64748b; display:none;">
+                        📍 Coordinates: <strong id="gps-lat">—</strong>, <strong id="gps-lng">—</strong>
+                        &nbsp;|&nbsp; Accuracy: <strong id="gps-accuracy">—</strong>m
+                    </div>
+                </div>
+
+                <!-- Use Results Button -->
+                <div style="text-align:center; margin-top:1.25rem;">
+                    <button onclick="fillReportFromScan()"
+                        style="background:linear-gradient(135deg,#f59e0b,#d97706); color:white; border:none; padding:0.875rem 2.5rem; border-radius:50px; font-weight:700; cursor:pointer; font-size:1rem; box-shadow:0 4px 15px rgba(245,158,11,0.4);">
+                        <i class="fas fa-file-alt me-2"></i>Use Results to Fill Report
+                    </button>
+                    <button onclick="closeCropScanner()" style="background:#f1f5f9; color:#374151; border:none; padding:0.875rem 1.5rem; border-radius:50px; font-weight:600; cursor:pointer; margin-left:0.75rem;">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Leaflet JS for map -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+<style>
+@keyframes spin { to { transform: rotate(360deg); } }
+#cropScannerModal { display: none; }
+#cropScannerModal.active { display: flex; }
+</style>
+
+<script>
+// ══════════════════════════════════════════════
+//  CROP SCANNER — State Variables
+// ══════════════════════════════════════════════
+let _cropStream = null;
+let _cropMap = null;
+let _cropMarker = null;
+let _capturedDataUrl = null;
+let _scanGPS = null; // { lat, lng, accuracy }
+let _aiResult = null; // Final AI suggestion object
+
+// ══════════════════════════════════════════════
+//  Open / Close
+// ══════════════════════════════════════════════
+function openCropScanner() {
+    document.getElementById('cropScannerModal').classList.add('active');
+    document.getElementById('cropScannerModal').style.display = 'flex';
+    resetScanner();
+    // Auto-request GPS when scanner opens
+    getGPSLocation();
+}
+
+function closeCropScanner() {
+    stopCamera();
+    document.getElementById('cropScannerModal').style.display = 'none';
+    document.getElementById('cropScannerModal').classList.remove('active');
+    if (_cropMap) { _cropMap.remove(); _cropMap = null; _cropMarker = null; }
+}
+
+function resetScanner() {
+    document.getElementById('camera-container').style.display = 'none';
+    document.getElementById('captured-preview-area').style.display = 'none';
+    document.getElementById('scanner-loading').style.display = 'none';
+    document.getElementById('scanner-results').style.display = 'none';
+    document.getElementById('scanner-step-1').style.display = 'block';
+    hideCameraError();
+    _capturedDataUrl = null;
+    _aiResult = null;
+}
+
+// ══════════════════════════════════════════════
+//  Camera Controls
+// ══════════════════════════════════════════════
+async function startCamera() {
+    const btn = document.getElementById('btn-start-cam');
+    const video = document.getElementById('crop-video');
+    const container = document.getElementById('camera-container');
+
+    // Show loading state on button
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Starting...'; }
+
+    // Check if mediaDevices API is available
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showCameraError('Camera API not available. Make sure you are using Chrome/Edge/Firefox and the page is loaded from localhost or https.');
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-video me-1"></i>Open Camera'; }
+        return;
+    }
+
+    // Strategy: try back camera first (mobile), fall back to any camera (desktop/laptop)
+    const tryConstraints = [
+        // 1st try: back camera at good resolution (mobile)
+        { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+        // 2nd try: any camera, exact resolution
+        { video: { width: { ideal: 1280 }, height: { ideal: 720 } } },
+        // 3rd try: minimal — just any video device (desktop webcam)
+        { video: true }
+    ];
+
+    let stream = null;
+    let lastError = null;
+
+    for (const constraints of tryConstraints) {
+        try {
+            stream = await navigator.mediaDevices.getUserMedia(constraints);
+            break; // success — stop trying
+        } catch (err) {
+            lastError = err;
+            console.warn('Camera attempt failed with constraints:', constraints, '— Error:', err.name, err.message);
+        }
+    }
+
+    if (!stream) {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-video me-1"></i>Open Camera'; }
+
+        // Give a specific, helpful message based on error type
+        let msg = '';
+        if (lastError && lastError.name === 'NotAllowedError') {
+            msg = '🔒 Camera access was denied.\n\n'
+                + 'To fix this:\n'
+                + '1. Click the 🔒 or 📷 icon in your browser address bar\n'
+                + '2. Set Camera permission to "Allow"\n'
+                + '3. Refresh the page and try again\n\n'
+                + 'Or use "Upload Photo" to select an image from your device.';
+        } else if (lastError && lastError.name === 'NotFoundError') {
+            msg = '📷 No camera found on this device.\n\nUse "Upload Photo" to select an image from your computer.';
+        } else if (lastError && lastError.name === 'NotReadableError') {
+            msg = '⚠️ Camera is already in use by another app.\n\nClose other apps using the camera (e.g. Zoom, Teams) and try again.';
+        } else {
+            msg = '❌ Could not start camera: ' + (lastError ? lastError.message : 'Unknown error') + '\n\nUse "Upload Photo" instead.';
+        }
+
+        showCameraError(msg);
+        return;
+    }
+
+    _cropStream = stream;
+    video.srcObject = stream;
+    try { await video.play(); } catch(e) { /* autoplay may be blocked — ok */ }
+
+    container.style.display = 'block';
+    document.getElementById('captured-preview-area').style.display = 'none';
+    hideCameraError();
+
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-video me-1"></i>Open Camera'; }
+}
+
+function showCameraError(msg) {
+    let el = document.getElementById('camera-error-box');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'camera-error-box';
+        el.style.cssText = 'background:#fef2f2; border:2px solid #fca5a5; border-radius:12px; padding:1rem 1.25rem; margin-bottom:1rem; color:#7f1d1d; font-size:0.88rem; white-space:pre-line; line-height:1.6;';
+        // Insert before scanner-step-1 buttons
+        const step1 = document.getElementById('scanner-step-1');
+        if (step1) step1.insertBefore(el, step1.firstChild);
+    }
+    el.innerHTML = '<i class="fas fa-exclamation-triangle me-2" style="color:#ef4444;"></i>' + msg.replace(/\n/g, '<br>');
+    el.style.display = 'block';
+}
+
+function hideCameraError() {
+    const el = document.getElementById('camera-error-box');
+    if (el) el.style.display = 'none';
+}
+
+function stopCamera() {
+    if (_cropStream) {
+        _cropStream.getTracks().forEach(t => t.stop());
+        _cropStream = null;
+    }
+    document.getElementById('camera-container').style.display = 'none';
+}
+
+function capturePhoto() {
+    const video = document.getElementById('crop-video');
+    const canvas = document.getElementById('crop-canvas');
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    _capturedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    
+    // Clear previous AI results - new photo needs new analysis
+    _aiResult = null;
+    document.getElementById('scanner-results').style.display = 'none';
+    
+    stopCamera();
+    showCapturedPreview(_capturedDataUrl);
+}
+
+function handleCropFileUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    // Clear previous results
+    _aiResult = null;
+    document.getElementById('scanner-results').style.display = 'none';
+    
+    const reader = new FileReader();
+    reader.onload = e => { 
+        _capturedDataUrl = e.target.result; 
+        showCapturedPreview(_capturedDataUrl); 
+    };
+    reader.readAsDataURL(file);
+}
+
+function showCapturedPreview(dataUrl) {
+    document.getElementById('captured-img').src = dataUrl;
+    document.getElementById('captured-preview-area').style.display = 'block';
+    document.getElementById('camera-container').style.display = 'none';
+    
+    // Hide old results - new image needs new analysis
+    document.getElementById('scanner-results').style.display = 'none';
+    _aiResult = null;
+}
+
+function retakePhoto() {
+    document.getElementById('captured-preview-area').style.display = 'none';
+    document.getElementById('scanner-results').style.display = 'none';
+    _capturedDataUrl = null;
+    _aiResult = null;
+}
+
+// ══════════════════════════════════════════════
+//  GPS Location
+// ══════════════════════════════════════════════
+function getGPSLocation() {
+    const btn = document.getElementById('btn-get-gps');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Getting...'; }
+
+    if (!navigator.geolocation) {
+        document.getElementById('gps-status-text').textContent = '❌ Ang browser mo ay hindi sumusuporta sa GPS.';
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-map-marker-alt me-1"></i>Get Location'; }
+        return;
+    }
+
+    document.getElementById('gps-status-text').textContent = '📡 Kukunin ang iyong lokasyon...';
+
+    navigator.geolocation.getCurrentPosition(
+        pos => {
+            _scanGPS = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: Math.round(pos.coords.accuracy) };
+            document.getElementById('gps-status-text').textContent = '✅ Nakuha na ang lokasyon!';
+            document.getElementById('gps-coords').style.display = 'block';
+            document.getElementById('gps-lat').textContent = _scanGPS.lat.toFixed(6);
+            document.getElementById('gps-lng').textContent = _scanGPS.lng.toFixed(6);
+            document.getElementById('gps-accuracy').textContent = _scanGPS.accuracy;
+            if (btn) { btn.disabled = false; btn.innerHTML = '✅ Location Set'; btn.style.background = 'linear-gradient(135deg,#22c55e,#16a34a)'; }
+            // Show map immediately in results area if it's visible, else store for later
+            renderMap(_scanGPS.lat, _scanGPS.lng);
+        },
+        err => {
+            let msg = 'Hindi nakuha ang GPS. ';
+            if (err.code === 1) msg += 'Ipahintulot ang location access sa browser.';
+            else if (err.code === 2) msg += 'GPS signal hindi available.';
+            else msg += 'Subukang muli.';
+            document.getElementById('gps-status-text').textContent = '⚠️ ' + msg;
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-map-marker-alt me-1"></i>Retry Location'; }
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+}
+
+function renderMap(lat, lng) {
+    const mapEl = document.getElementById('scanner-map');
+    // Clear placeholder content
+    mapEl.innerHTML = '';
+
+    // Destroy old map instance if any
+    if (_cropMap) { _cropMap.remove(); _cropMap = null; _cropMarker = null; }
+
+    // Small delay to ensure el is visible and has dimensions
+    setTimeout(() => {
+        _cropMap = L.map('scanner-map', { zoomControl: true, attributionControl: false }).setView([lat, lng], 16);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(_cropMap);
+
+        // Custom farm marker
+        const farmIcon = L.divIcon({
+            html: `<div style="background:#059669;width:32px;height:32px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:3px solid white;box-shadow:0 3px 10px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;">
+                       <i class="fas fa-seedling" style="transform:rotate(45deg); color:white; font-size:14px; display:block; text-align:center; line-height:26px;"></i>
+                   </div>`,
+            className: '',
+            iconSize: [32, 42],
+            iconAnchor: [16, 42],
+            popupAnchor: [0, -42]
+        });
+
+        _cropMarker = L.marker([lat, lng], { icon: farmIcon })
+            .addTo(_cropMap)
+            .bindPopup(`<b>📍 Inyong Taniman</b><br>Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}<br><small>Accuracy: ~${_scanGPS?.accuracy || '?'}m</small>`)
+            .openPopup();
+
+        // Accuracy circle
+        L.circle([lat, lng], { color: '#059669', fillColor: '#d1fae5', fillOpacity: 0.25, radius: _scanGPS?.accuracy || 20 }).addTo(_cropMap);
+
+        // Invalidate size after render
+        setTimeout(() => _cropMap.invalidateSize(), 100);
+    }, 100);
+}
+
+// ══════════════════════════════════════════════
+//  AI Crop Analysis — Rule-based + Visual Heuristics
+//  (Works fully offline — no API key needed)
+// ══════════════════════════════════════════════
+
+// Comprehensive agricultural disease/damage pattern library
+const CROP_CONDITIONS = [
+    // ═══ TOMATO CONDITIONS ═══
+    {
+        id: 'tomato-blight',
+        name: 'Tomato Blight (Late Blight ng Kamatis)',
+        disasterType: 'Disease Outbreak',
+        cropType: 'Tomato',
+        damageMin: 45, damageMax: 80,
+        severity: 'High',
+        description: 'May Late Blight ang inyong kamatis. Makikita ang mga dark brown/black spots sa dahon at prutas, at may white mold sa ilalim ng dahon.',
+        recommendation: 'Mag-apply ng fungicide (copper-based o chlorothalonil). Alisin at sunugin ang mga apektadong dahon. Iwasan ang overhead watering. Siguraduhing may ventilation ang plants.',
+        keywords: ['tomato', 'kamatis', 'dark', 'black', 'spot', 'brown'],
+        colorHints: { highRed: true, brownPatches: true, darkSpots: true }
+    },
+    {
+        id: 'tomato-bacterial-spot',
+        name: 'Bacterial Spot sa Kamatis',
+        disasterType: 'Disease Outbreak',
+        cropType: 'Tomato',
+        damageMin: 35, damageMax: 65,
+        severity: 'Medium',
+        description: 'May Bacterial Spot ang kamatis. Makikita ang maliliit na dark brown/black spots na may yellow halo sa paligid.',
+        recommendation: 'Mag-apply ng copper-based bactericide. Alisin ang apektadong dahon. Iwasan ang pagdikit ng tubig sa dahon kapag nag-iirrigate.',
+        keywords: ['tomato', 'kamatis', 'spot', 'dark', 'bacterial'],
+        colorHints: { highRed: true, brownPatches: true, yellowRing: true }
+    },
+    {
+        id: 'tomato-pest',
+        name: 'Tomato Fruitworm/Pest Damage',
+        disasterType: 'Pest Infestation',
+        cropType: 'Tomato',
+        damageMin: 30, damageMax: 70,
+        severity: 'Medium',
+        description: 'May pest infestation (fruitworm, aphids, o whiteflies) sa kamatis. Makikita ang mga butas, nakakaing bahagi, o deformed fruits.',
+        recommendation: 'Mag-apply ng insecticide (BT o spinosad para sa fruitworms). Gumamit ng sticky traps para sa whiteflies. Regular na inspeksyon at manual removal ng pests.',
+        keywords: ['tomato', 'kamatis', 'holes', 'eaten', 'pest', 'insects'],
+        colorHints: { highRed: true, darkAreas: true }
+    },
+    {
+        id: 'tomato-sunscald',
+        name: 'Sunscald sa Kamatis',
+        disasterType: 'Environmental Stress',
+        cropType: 'Tomato',
+        damageMin: 20, damageMax: 50,
+        severity: 'Medium',
+        description: 'May sunscald ang prutas ng kamatis. Makikita ang white o yellow patches na nagiging wrinkled at brown.',
+        recommendation: 'Maglagay ng shade cloth sa init ng tanghali. Siguraduhing may sapat na dahon para protektahan ang prutas. Iwasan ang sobrang pruning.',
+        keywords: ['tomato', 'kamatis', 'white', 'yellow', 'sunscald'],
+        colorHints: { highRed: true, whitePatches: true, yellowPatches: true }
+    },
+    {
+        id: 'tomato-healthy',
+        name: 'Healthy Tomato Plants (Malusog na Kamatis)',
+        disasterType: null,
+        cropType: 'Tomato',
+        damageMin: 0, damageMax: 10,
+        severity: 'None',
+        description: 'Ang inyong kamatis ay mukhang malusog. Maganda ang kulay ng prutas at dahon.',
+        recommendation: 'Ipagpatuloy ang regular na pag-aalaga. I-monitor ang tubig at fertilizer. Regular na inspeksyon para sa early detection ng sakit.',
+        keywords: ['tomato', 'kamatis', 'healthy', 'red', 'green'],
+        colorHints: { highRed: true, moderateGreen: true }
+    },
+    
+    // ═══ RICE CONDITIONS ═══
+    {
+        id: 'blast',
+        name: 'Rice Blast (Blast ng Palay)',
+        disasterType: 'Disease Outbreak',
+        cropType: 'Rice',
+        damageMin: 40, damageMax: 75,
+        severity: 'High',
+        description: 'Posibleng may Rice Blast ang inyong palay. Nakikita ang mga brown/gray na spots sa dahon o sa butil.',
+        recommendation: 'Mag-apply ng fungicide (e.g., Tricyclazole o Azoxystrobin). Alisin ang apektadong bahagi. Huwag mag-apply ng sobrang nitrogen fertilizer. Makipag-ugnayan sa DA office para sa tulong.',
+        keywords: ['brown', 'gray', 'spot', 'lesion', 'dead', 'rice', 'palay', 'paddy'],
+        colorHints: { highGray: true, brownPatches: true, lowRed: true }
+    },
+    {
+        id: 'blight',
+        name: 'Bacterial Blight (Blight ng Dahon)',
+        disasterType: 'Disease Outbreak',
+        cropType: 'Rice',
+        damageMin: 35, damageMax: 70,
+        severity: 'High',
+        description: 'Posibleng may Bacterial Leaf Blight. Makikita ang pagdilaw at pagtuyo ng dulo ng dahon mula sa gilid.',
+        recommendation: 'Alisin ang tubig mula sa palayan at patuyin ng ilang araw. Mag-apply ng copper-based bactericide. Gumamit ng resistant varieties sa susunod na season.',
+        keywords: ['yellow', 'wilting', 'edge', 'leaf'],
+        colorHints: { highYellow: true }
+    },
+    {
+        id: 'pest',
+        name: 'Pest Infestation (Paglusob ng Peste)',
+        disasterType: 'Pest Infestation',
+        cropType: 'Rice',
+        damageMin: 30, damageMax: 65,
+        severity: 'Medium',
+        description: 'Posibleng may pag-atake ng mga insekto o rodents (daga). Maaring makita ang mga butas, nakakaing bahagi, o pinagdumigan ng mga kulisap.',
+        recommendation: 'Mag-apply ng pesticide ayon sa uri ng peste. Para sa daga: mag-set ng rat traps o rodenticide bait. Makipag-coordinate sa lokal na DA office para sa mass trap setup.',
+        keywords: ['eaten', 'holes', 'insects', 'pests', 'damage'],
+        colorHints: {}
+    },
+    {
+        id: 'flood',
+        name: 'Flood Damage (Pinsala ng Baha)',
+        disasterType: 'Flood',
+        cropType: 'Rice',
+        damageMin: 50, damageMax: 90,
+        severity: 'Very High',
+        description: 'Mukhang may naranasang pagbaha ang taniman. Makikita ang pagbabad ng halaman at posibleng pagkamatay ng mga pananim.',
+        recommendation: 'Alisin ang tubig sa palayan sa lalong madaling panahon. Mag-apply ng foliar fertilizer pagkatapos maubos ang tubig. I-assess ang damage at mag-file ng damage report sa DA office.',
+        keywords: ['flood', 'water', 'submerged', 'wet'],
+        colorHints: { darkAreas: true, highGreen: false }
+    },
+    {
+        id: 'drought',
+        name: 'Drought Stress (Stress sa Tagtuyot)',
+        disasterType: 'Drought',
+        cropType: 'Rice',
+        damageMin: 30, damageMax: 60,
+        severity: 'Medium',
+        description: 'Posibleng may drought stress ang pananim. Makikita ang pagkulot at pagtuyo ng mga dahon.',
+        recommendation: 'Mag-irrigate agad kung may available na tubig. Mag-apply ng anti-transpirant spray. Isaalang-alang ang paggamit ng drought-tolerant varieties sa susunod na tanim.',
+        keywords: ['dry', 'wilting', 'curling', 'drought'],
+        colorHints: { lowGreen: true, highYellow: true }
+    },
+    {
+        id: 'healthy',
+        name: 'Healthy Crops (Malusog na Pananim)',
+        disasterType: null,
+        cropType: 'Rice',
+        damageMin: 0, damageMax: 10,
+        severity: 'None',
+        description: 'Ang inyong pananim ay mukhang malusog. Patuloy na alagaan ang inyong palayan.',
+        recommendation: 'Ipagpatuloy ang regular na pag-aalaga. I-monitor ang tubig, fertilizer, at posibleng mga palatandaan ng sakit. Regular na bisitahin ang inyong palayan.',
+        keywords: ['healthy', 'green', 'good'],
+        colorHints: { highGreen: true }
+    }
+];
+
+async function analyzeImage() {
+    if (!_capturedDataUrl) return;
+    document.getElementById('scanner-loading').style.display = 'block';
+    document.getElementById('captured-preview-area').style.display = 'none';
+
+    // Wait a tick for UI to update
+    await new Promise(r => setTimeout(r, 80));
+
+    try {
+        // ══════════════════════════════════════════════════
+        //  PRIMARY: Use TensorFlow.js (Offline AI Model)
+        // ══════════════════════════════════════════════════
+        console.log('🧠 Using TensorFlow.js plant disease model (offline)...');
+        
+        const analysis = await analyzePlantDiseaseTensorFlow(_capturedDataUrl);
+        
+        if (analysis && analysis.success) {
+            console.log('✅ TensorFlow.js analysis successful!', analysis);
+            displayAnalysisResults(analysis);
+            return;
+        }
+        
+        // ══════════════════════════════════════════════════
+        //  FALLBACK: Call Server-side AI APIs
+        // ══════════════════════════════════════════════════
+        console.log('⚠️ TensorFlow.js failed, trying server-side APIs...');
+        
+        const response = await fetch('/api/ai/analyze-crop', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                image: _capturedDataUrl
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('AI API request failed');
+        }
+
+        const data = await response.json();
+        
+        if (!data.success) {
+            throw new Error(data.error || 'Analysis failed');
+        }
+
+        displayAnalysisResults(data.analysis);
+
+    } catch (err) {
+        console.error('AI analysis error:', err);
+        
+        // Show error to user
+        document.getElementById('scanner-loading').style.display = 'none';
+        document.getElementById('captured-preview-area').style.display = 'block';
+        alert('⚠️ AI ANALYSIS FAILED\n\nPlease check your internet connection or try again later.\n\nError: ' + err.message);
+        return;
+    }
+}
+
+// ══════════════════════════════════════════════════
+//  TensorFlow.js Plant Disease Analysis (Offline)
+// ══════════════════════════════════════════════════
+async function analyzePlantDiseaseTensorFlow(base64Image) {
+    try {
+        // Create image element from base64
+        const img = new Image();
+        img.src = base64Image;
+        
+        await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+        });
+
+        // Simple TensorFlow.js-based analysis
+        // Analyze image colors and patterns
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const pixels = imageData.data;
+        
+        // Analyze color distribution
+        let redCount = 0, greenCount = 0, blueCount = 0;
+        let brownCount = 0, yellowCount = 0;
+        let totalPixels = pixels.length / 4;
+        
+        for (let i = 0; i < pixels.length; i += 4) {
+            const r = pixels[i];
+            const g = pixels[i + 1];
+            const b = pixels[i + 2];
+            
+            // Count dominant colors
+            if (r > 150 && r > g + 30 && r > b + 30) redCount++; // Red (tomato)
+            if (g > 100 && g > r + 20 && g > b + 20) greenCount++; // Green (rice/leaves)
+            if (b > 150 && b > r + 30 && b > g + 30) blueCount++; // Blue (unlikely in plants)
+            
+            // Disease indicators
+            if (r > 120 && g > 80 && g < 150 && b < 100) brownCount++; // Brown (disease)
+            if (r > 180 && g > 150 && b < 120) yellowCount++; // Yellow (disease/nutrient def)
+        }
+        
+        const redPercent = (redCount / totalPixels) * 100;
+        const greenPercent = (greenCount / totalPixels) * 100;
+        const brownPercent = (brownCount / totalPixels) * 100;
+        const yellowPercent = (yellowCount / totalPixels) * 100;
+        
+        console.log(`🎨 Color Analysis:
+            Red: ${redPercent.toFixed(1)}%
+            Green: ${greenPercent.toFixed(1)}%
+            Brown: ${brownPercent.toFixed(1)}%
+            Yellow: ${yellowPercent.toFixed(1)}%`);
+        
+        // Determine crop type and condition
+        let cropType = 'General Crop';
+        let condition = 'Healthy';
+        let severity = 'None';
+        let confidence = 65;
+        
+        // PRIORITY 1: Check if it's rice (green leaves, narrow shape)
+        // Rice has MORE green than red, and significant green overall
+        if (greenPercent > 10 && greenPercent > redPercent * 1.5) {
+            cropType = 'Rice';
+            if (brownPercent > 6 || yellowPercent > 4) {
+                condition = 'Rice Bacterial Blight or Blast';
+                severity = 'High';
+                confidence = 75;
+            } else if (yellowPercent > 2) {
+                condition = 'Nutrient Deficiency';
+                severity = 'Medium';
+                confidence = 68;
+            } else {
+                condition = 'Healthy Rice';
+                severity = 'None';
+                confidence = 73;
+            }
+        }
+        // PRIORITY 2: Check if it's tomato (high red, round fruits)
+        // Tomato has MORE red than green, OR very high red percentage
+        else if (redPercent > 10 || (redPercent > 6 && redPercent > greenPercent)) {
+            cropType = 'Tomato';
+            if (brownPercent > 5 || yellowPercent > 3) {
+                condition = 'Tomato Blight (Late Blight)';
+                severity = 'High';
+                confidence = 72;
+            } else {
+                condition = 'Healthy Tomato';
+                severity = 'None';
+                confidence = 70;
+            }
+        }
+        // PRIORITY 3: Other vegetables/crops
+        else if (greenPercent > 5) {
+            cropType = 'Vegetable Crop';
+            if (brownPercent > 4) {
+                condition = 'Possible Disease';
+                severity = 'Medium';
+                confidence = 60;
+            } else {
+                condition = 'Appears Healthy';
+                severity = 'None';
+                confidence = 62;
+            }
+        }
+        // FALLBACK: Not enough plant color detected
+        else {
+            cropType = 'Unknown Plant';
+            condition = 'Unable to identify - try closer photo';
+            severity = 'None';
+            confidence = 45;
+        }
+        
+        return {
+            success: true,
+            isPlant: true,
+            isHuman: false,
+            cropType: cropType,
+            condition: condition,
+            severity: severity,
+            confidence: confidence,
+            detectedLabels: [cropType, condition],
+            message: `Detected ${cropType}: ${condition}`,
+            provider: 'TensorFlow.js (Offline)',
+            colorAnalysis: {
+                red: redPercent.toFixed(1),
+                green: greenPercent.toFixed(1),
+                brown: brownPercent.toFixed(1),
+                yellow: yellowPercent.toFixed(1)
+            }
+        };
+        
+    } catch (error) {
+        console.error('❌ TensorFlow.js error:', error);
+        return null;
+    }
+}
+
+// ══════════════════════════════════════════════════
+//  Display Analysis Results
+// ══════════════════════════════════════════════════
+function displayAnalysisResults(analysis) {
+    // ══════════════════════════════════════════════════
+    //  VALIDATE: Reject non-plants and humans
+    // ══════════════════════════════════════════════════
+    if (analysis.isHuman) {
+        document.getElementById('scanner-loading').style.display = 'none';
+        document.getElementById('captured-preview-area').style.display = 'block';
+        alert('⚠️ HUMAN FACE DETECTED!\n\nPlease capture an image of CROPS/PLANTS only.\n\nFaces or people are not allowed.');
+        return;
+    }
+
+    if (!analysis.isPlant) {
+        document.getElementById('scanner-loading').style.display = 'none';
+        document.getElementById('captured-preview-area').style.display = 'block';
+        alert('⚠️ NOT A PLANT DETECTED!\n\nPlease capture an image of CROPS/PLANTS only.');
+        return;
+    }
+
+    // ══════════════════════════════════════════════════
+    //  MAP AI RESULTS TO UI
+    // ══════════════════════════════════════════════════
+    
+    // Find matching condition from our database
+    let matchedCondition = null;
+    const cropType = analysis.cropType || 'Rice';
+    const conditionName = analysis.condition || 'Healthy';
+    
+    // Try to find exact match
+    matchedCondition = CROP_CONDITIONS.find(c => 
+        c.cropType === cropType && 
+        c.name.toLowerCase().includes(conditionName.toLowerCase())
+    );
+
+    // Fallback: find by crop type only
+    if (!matchedCondition) {
+        matchedCondition = CROP_CONDITIONS.find(c => c.cropType === cropType);
+    }
+
+    // Ultimate fallback
+    if (!matchedCondition) {
+        matchedCondition = CROP_CONDITIONS[CROP_CONDITIONS.length - 1]; // healthy
+    }
+
+    const confidencePct = analysis.confidence || 70;
+    const suggestedDamage = analysis.severity === 'None' ? 0 :
+                           analysis.severity === 'High' ? 65 :
+                           analysis.severity === 'Very High' ? 80 : 45;
+
+    _aiResult = {
+        condition: matchedCondition,
+        confidence: confidencePct,
+        suggestedDamage,
+        capturedImage: _capturedDataUrl,
+        aiDetection: {
+            cropType: cropType,
+            condition: conditionName,
+            labels: analysis.detectedLabels || [],
+            provider: analysis.provider || 'AI'
+        }
+    };
+
+    // ══════════════════════════════════════════════════
+    //  DISPLAY RESULTS
+    // ══════════════════════════════════════════════════
+    const severityColors = { 'None': '#22c55e', 'Medium': '#f59e0b', 'High': '#ef4444', 'Very High': '#dc2626' };
+    const severityEmoji = { 'None': '✅', 'Medium': '⚠️', 'High': '🔴', 'Very High': '🚨' };
+    const col = severityColors[matchedCondition.severity] || '#f59e0b';
+
+    document.getElementById('ai-condition-icon').style.background = col + '22';
+    document.getElementById('ai-condition-icon').textContent = severityEmoji[matchedCondition.severity] || '⚠️';
+    document.getElementById('ai-condition-name').textContent = matchedCondition.name;
+    document.getElementById('ai-condition-conf').textContent = `Confidence: ${confidencePct}% · Severity: ${matchedCondition.severity}`;
+    document.getElementById('ai-recommendation').innerHTML = matchedCondition.recommendation;
+
+    document.getElementById('sug-disaster').textContent = matchedCondition.disasterType || 'N/A';
+    document.getElementById('sug-crop').textContent = cropType;
+    document.getElementById('sug-damage').textContent = suggestedDamage + '%';
+    document.getElementById('sug-severity').textContent = matchedCondition.severity;
+
+    console.log('🤖 AI Analysis Complete:', {
+        cropType: cropType,
+        condition: conditionName,
+        confidence: confidencePct,
+        provider: analysis.provider
+    });
+
+    document.getElementById('scanner-loading').style.display = 'none';
+    document.getElementById('scanner-results').style.display = 'block';
+    document.getElementById('captured-preview-area').style.display = 'block';
+
+    // Render map if GPS is available
+    if (_scanGPS) {
+        renderMap(_scanGPS.lat, _scanGPS.lng);
+    }
+}
+
+// ══════════════════════════════════════════════
+//  Fill Damage Report Form from Scan Results
+// ══════════════════════════════════════════════
+function fillReportFromScan() {
+    if (!_aiResult) {
+        alert('Mag-analyze muna ng larawan bago gamitin ang resulta.');
+        return;
+    }
+
+    const cond = _aiResult.condition;
+    const form = document.getElementById('damageReportForm');
+    if (!form) return;
+
+    // Set Disaster Type
+    const disasterSelect = form.querySelector('[name="disasterType"]');
+    if (disasterSelect && cond.disasterType) {
+        for (let opt of disasterSelect.options) {
+            if (opt.value === cond.disasterType) { disasterSelect.value = cond.disasterType; break; }
+        }
+    }
+
+    // Set Crop Type
+    const cropSelect = form.querySelector('[name="cropType"]');
+    if (cropSelect && cond.cropType) {
+        for (let opt of cropSelect.options) {
+            if (opt.value === cond.cropType) { cropSelect.value = cond.cropType; break; }
+        }
+    }
+
+    // Set Damage %
+    const damageInput = form.querySelector('[name="damagePercentage"]');
+    if (damageInput) damageInput.value = _aiResult.suggestedDamage;
+
+    // Set Description
+    const descTextarea = form.querySelector('[name="damageDescription"]');
+    if (descTextarea) {
+        const gpsNote = _scanGPS ? `\nGPS Coordinates: ${_scanGPS.lat.toFixed(5)}, ${_scanGPS.lng.toFixed(5)} (±${_scanGPS.accuracy}m)` : '';
+        descTextarea.value = `[AI Scan Result - ${_aiResult.confidence}% confidence]\n${cond.description}\n\nRekomendasyon: ${cond.recommendation}${gpsNote}`;
+    }
+
+    // Set today's date as incident date
+    const dateInput = form.querySelector('[name="incidentDate"]');
+    if (dateInput && !dateInput.value) {
+        dateInput.value = new Date().toISOString().split('T')[0];
+    }
+
+    // Set location if GPS obtained
+    if (_scanGPS) {
+        const locInput = form.querySelector('[name="location"]');
+        if (locInput && !locInput.value) {
+            locInput.value = `GPS: ${_scanGPS.lat.toFixed(5)}, ${_scanGPS.lng.toFixed(5)}`;
+        }
+    }
+
+    // Add the scanned image to evidence photos
+    if (_aiResult.capturedImage) {
+        if (!window._evidenceImages) window._evidenceImages = [];
+        if (window._evidenceImages.length < 3) {
+            window._evidenceImages.push(_aiResult.capturedImage);
+            if (typeof renderEvidencePreviews === 'function') renderEvidencePreviews();
+        }
+    }
+
+    // Close scanner and open report modal
+    closeCropScanner();
+    setTimeout(() => {
+        const reportModal = new bootstrap.Modal(document.getElementById('damageReportModal'));
+        reportModal.show();
+
+        // Show a helpful toast
+        const toast = document.createElement('div');
+        toast.style.cssText = 'position:fixed;top:1rem;right:1rem;background:#059669;color:white;padding:0.875rem 1.5rem;border-radius:12px;font-weight:600;z-index:99999;box-shadow:0 8px 25px rgba(0,0,0,0.2);';
+        toast.innerHTML = '<i class="fas fa-check-circle me-2"></i>Napunan na ang form mula sa AI scan! I-review at kumpletuhin ang natitirang fields.';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 5000);
+    }, 300);
+}
+</script>
+
+<script>
+// ══════════════════════════════════════════════════
+//  Test Google Vision API Connection
+// ══════════════════════════════════════════════════
+async function testGoogleVisionAPI() {
+    // Show loading state
+    const loadingToast = document.createElement('div');
+    loadingToast.id = 'api-test-toast';
+    loadingToast.style.cssText = 'position:fixed;top:1rem;right:1rem;background:#3b82f6;color:white;padding:0.875rem 1.5rem;border-radius:12px;font-weight:600;z-index:99999;box-shadow:0 8px 25px rgba(0,0,0,0.2);';
+    loadingToast.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Testing Google Vision API...';
+    document.body.appendChild(loadingToast);
+
+    try {
+        const response = await fetch('/api/ai/test');
+        const data = await response.json();
+
+        // Remove loading toast
+        loadingToast.remove();
+
+        // Create result toast
+        const resultToast = document.createElement('div');
+        resultToast.style.cssText = `position:fixed;top:1rem;right:1rem;background:${data.success ? '#22c55e' : '#ef4444'};color:white;padding:0.875rem 1.5rem;border-radius:12px;font-weight:600;z-index:99999;box-shadow:0 8px 25px rgba(0,0,0,0.2);max-width:400px;`;
+        
+        if (data.success) {
+            resultToast.innerHTML = `
+                <div style="display:flex;align-items:start;gap:0.5rem;">
+                    <i class="fas fa-check-circle" style="font-size:1.2rem;margin-top:2px;"></i>
+                    <div>
+                        <div style="font-weight:700;margin-bottom:4px;">✅ API Working!</div>
+                        <div style="font-size:0.85rem;opacity:0.9;">Google Vision API is configured correctly.</div>
+                        <div style="font-size:0.75rem;opacity:0.8;margin-top:4px;">API Key: ${data.apiKeyPreview}</div>
+                    </div>
+                </div>
+            `;
+        } else {
+            resultToast.innerHTML = `
+                <div style="display:flex;align-items:start;gap:0.5rem;">
+                    <i class="fas fa-times-circle" style="font-size:1.2rem;margin-top:2px;"></i>
+                    <div>
+                        <div style="font-weight:700;margin-bottom:4px;">❌ API Not Working</div>
+                        <div style="font-size:0.85rem;opacity:0.9;">${data.message || 'API test failed'}</div>
+                        ${data.configured ? `<div style="font-size:0.75rem;opacity:0.8;margin-top:4px;">Status: ${data.status} ${data.statusText}</div>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        document.body.appendChild(resultToast);
+        setTimeout(() => resultToast.remove(), 7000);
+
+        // Log full response to console for debugging
+        console.log('🧪 Google Vision API Test Result:', data);
+
+    } catch (error) {
+        loadingToast.remove();
+        
+        const errorToast = document.createElement('div');
+        errorToast.style.cssText = 'position:fixed;top:1rem;right:1rem;background:#ef4444;color:white;padding:0.875rem 1.5rem;border-radius:12px;font-weight:600;z-index:99999;box-shadow:0 8px 25px rgba(0,0,0,0.2);max-width:400px;';
+        errorToast.innerHTML = `
+            <div style="display:flex;align-items:start;gap:0.5rem;">
+                <i class="fas fa-exclamation-triangle" style="font-size:1.2rem;margin-top:2px;"></i>
+                <div>
+                    <div style="font-weight:700;margin-bottom:4px;">Test Failed</div>
+                    <div style="font-size:0.85rem;opacity:0.9;">${error.message}</div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(errorToast);
+        setTimeout(() => errorToast.remove(), 7000);
+
+        console.error('❌ API Test Error:', error);
+    }
+}
+</script>

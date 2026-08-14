@@ -841,14 +841,14 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Land Type</label>
-                    <select class="form-control" name="landType" required>
-                        <option value="">Select Land Type</option>
-                        <option value="Rice Field">Rice Field</option>
-                        <option value="Corn Field">Corn Field</option>
-                        <option value="Vegetable Farm">Vegetable Farm</option>
-                        <option value="Fruit Orchard">Fruit Orchard</option>
-                        <option value="Mixed Farming">Mixed Farming</option>
-                        <option value="Other">Other</option>
+                    <select class="form-control" name="landType" required style="color: #1e293b;">
+                        <option value="" style="color: #6b7280;">Select Land Type</option>
+                        <option value="Rice Field" style="background: white; color: #1e293b;">Rice Field</option>
+                        <option value="Corn Field" style="background: white; color: #1e293b;">Corn Field</option>
+                        <option value="Vegetable Farm" style="background: white; color: #1e293b;">Vegetable Farm</option>
+                        <option value="Fruit Orchard" style="background: white; color: #1e293b;">Fruit Orchard</option>
+                        <option value="Mixed Farming" style="background: white; color: #1e293b;">Mixed Farming</option>
+                        <option value="Other" style="background: white; color: #1e293b;">Other</option>
                     </select>
                 </div>
                 <button type="submit" class="btn login-btn">

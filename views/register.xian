@@ -93,8 +93,8 @@
         }
         
         .form-control, .form-select {
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.25);
             border-radius: 12px;
             padding: 1rem 1.25rem;
             color: white;
@@ -109,20 +109,34 @@
         }
         
         .form-control:focus, .form-select:focus {
-            background: rgba(255, 255, 255, 0.2);
-            border-color: rgba(255, 255, 255, 0.4);
-            box-shadow: 0 0 0 0.2rem rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.22);
+            border-color: rgba(255, 255, 255, 0.5);
+            box-shadow: 0 0 0 0.2rem rgba(255, 255, 255, 0.12);
             color: white;
+            outline: none;
         }
-        
+
+        /* Select: white arrow icon */
         .form-select {
             background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m1 6 7 7 7-7'/%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 1rem center;
+            background-size: 14px 10px;
         }
         
-        .form-select option {
-            background: white;
-            color: #1e293b;
+        /* Dropdown option list — must use solid colors so text is always readable */
+        .form-select option,
+        .form-select optgroup {
+            background: #1e3a2f;
+            color: #f1f5f9;
             font-weight: 500;
+            font-size: 0.95rem;
+            padding: 0.5rem;
+        }
+
+        /* First "placeholder" option */
+        .form-select option[value=""] {
+            color: #94a3b8;
         }
         
         .register-btn {
@@ -271,23 +285,23 @@
                     
                     <div class="form-group">
                         <label for="barangay" class="form-label">Barangay</label>
-                        <select class="form-select" id="barangay" name="barangay" required style="color: #1e293b;">
-                            <option value="" style="color: #6b7280;">Select Barangay</option>
-                            <option value="Bagong Sikat" style="background: white; color: #1e293b;">Bagong Sikat</option>
-                            <option value="Balatasan" style="background: white; color: #1e293b;">Balatasan</option>
-                            <option value="Benli" style="background: white; color: #1e293b;">Benli</option>
-                            <option value="Cabugao" style="background: white; color: #1e293b;">Cabugao</option>
-                            <option value="Cambunang" style="background: white; color: #1e293b;">Cambunang</option>
-                            <option value="Campaasan" style="background: white; color: #1e293b;">Campaasan</option>
-                            <option value="Maasin" style="background: white; color: #1e293b;">Maasin</option>
-                            <option value="Maujao" style="background: white; color: #1e293b;">Maujao</option>
-                            <option value="Milagrosa" style="background: white; color: #1e293b;">Milagrosa</option>
-                            <option value="Nasukob" style="background: white; color: #1e293b;">Nasukob</option>
-                            <option value="Poblacion" style="background: white; color: #1e293b;">Poblacion</option>
-                            <option value="San Francisco" style="background: white; color: #1e293b;">San Francisco</option>
-                            <option value="San Isidro" style="background: white; color: #1e293b;">San Isidro</option>
-                            <option value="San Juan" style="background: white; color: #1e293b;">San Juan</option>
-                            <option value="San Roque" style="background: white; color: #1e293b;">San Roque</option>
+                        <select class="form-select" id="barangay" name="barangay" required>
+                            <option value="">Select Barangay</option>
+                            <option value="Bagong Sikat">Bagong Sikat</option>
+                            <option value="Balatasan">Balatasan</option>
+                            <option value="Benli">Benli</option>
+                            <option value="Cabugao">Cabugao</option>
+                            <option value="Cambunang">Cambunang</option>
+                            <option value="Campaasan">Campaasan</option>
+                            <option value="Maasin">Maasin</option>
+                            <option value="Maujao">Maujao</option>
+                            <option value="Milagrosa">Milagrosa</option>
+                            <option value="Nasukob">Nasukob</option>
+                            <option value="Poblacion">Poblacion</option>
+                            <option value="San Francisco">San Francisco</option>
+                            <option value="San Isidro">San Isidro</option>
+                            <option value="San Juan">San Juan</option>
+                            <option value="San Roque">San Roque</option>
                         </select>
                     </div>
                 </div>
@@ -365,9 +379,9 @@
                     </div>
                 </div>
                 
-                <button type="submit" class="btn register-btn">
+                <button type="submit" class="btn register-btn" id="submitBtn">
                     <i class="fas fa-user-plus me-2"></i>
-                    Create Account
+                    <span id="submitBtnText">Create Account</span>
                 </button>
             </form>
             
@@ -388,6 +402,7 @@
             const landArea = document.getElementById('landArea');
             const landType = document.getElementById('landType');
             const dob = document.getElementById('dob');
+            const submitBtnText = document.getElementById('submitBtnText');
             
             // Set max date for DOB (18 years ago)
             const today = new Date();
@@ -400,24 +415,27 @@
                 landArea.required = true;
                 landType.required = true;
                 dob.required = false;
+                if (submitBtnText) submitBtnText.textContent = 'Register as Farmer';
             } else if (role === 'staff') {
                 farmerFields.classList.add('hidden');
                 staffFields.classList.remove('hidden');
                 landArea.required = false;
                 landType.required = false;
                 dob.required = true;
+                if (submitBtnText) submitBtnText.textContent = 'Register as Staff';
             } else {
                 farmerFields.classList.add('hidden');
                 staffFields.classList.add('hidden');
                 landArea.required = false;
                 landType.required = false;
                 dob.required = false;
+                if (submitBtnText) submitBtnText.textContent = 'Create Account';
             }
         }
         
         // Form submission with loading state
         document.getElementById('registerForm').addEventListener('submit', function(e) {
-            const submitBtn = this.querySelector('.register-btn');
+            const submitBtn = document.getElementById('submitBtn');
             const originalText = submitBtn.innerHTML;
             const role = document.getElementById('role').value;
             

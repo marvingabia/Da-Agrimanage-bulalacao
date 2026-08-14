@@ -9,16 +9,16 @@ const mysqlModels = await Promise.all([
     import("../models/AnnouncementMySQL.js"),
     import("../models/ClaimMySQL.js"),
     import("../models/DamageReportMySQL.js"),
-    import("../models/InsuranceMySQL.js"),
-    import("../models/RequestLetterMySQL.js")
+    import("../models/RequestLetterMySQL.js"),
+    import("../models/BenefitMySQL.js")
 ]);
 
 const Inventory = mysqlModels[0].Inventory || mysqlModels[0].default;
 const Announcement = mysqlModels[1].Announcement || mysqlModels[1].default;
 const Claim = mysqlModels[2].Claim || mysqlModels[2].default;
 const DamageReport = mysqlModels[3].DamageReport || mysqlModels[3].default;
-const Insurance = mysqlModels[4].Insurance || mysqlModels[4].default;
-const RequestLetter = mysqlModels[5].RequestLetter || mysqlModels[5].default;
+const RequestLetter = mysqlModels[4].RequestLetter || mysqlModels[4].default;
+const Benefit = mysqlModels[5].Benefit || mysqlModels[5].default;
 
 console.log('✅ Using MySQL models for staff operations');
 
@@ -299,6 +299,100 @@ export const getDamageReports = async (req, res) => {
     }
 };
 
+// Get insurance/benefits
+export const getInsurance = async (req, res) => {
+    try {
+        const benefits = await Benefit.findAll();
+        res.json({ benefits });
+    } catch (error) {
+        console.error('Error getting insurance/benefits:', error);
+        res.status(500).json({ error: 'Failed to load insurance data' });
+    }
+};
+
+// Create insurance/benefit
+export const createInsurance = async (req, res) => {
+    try {
+        const { farmerId, farmerName, farmerEmail, barangay, benefitType, itemName, quantity, unit, value, description, distributionDate, distributionLocation, notes, damageReportId } = req.body;
+        
+        const benefit = new Benefit({
+            farmerId,
+            farmerName,
+            farmerEmail,
+            barangay,
+            benefitType,
+            itemName,
+            quantity: parseFloat(quantity),
+            unit,
+            value: value ? parseFloat(value) : null,
+            description,
+            distributionDate: distributionDate ? new Date(distributionDate) : null,
+            distributionLocation,
+            notes,
+            damageReportId,
+            status: 'for_claim',
+            createdBy: req.session.userId,
+            createdByName: req.session.userName
+        });
+
+        await benefit.save();
+        res.json({ success: true, message: 'Insurance/benefit created successfully', benefit });
+    } catch (error) {
+        console.error('Error creating insurance/benefit:', error);
+        res.status(500).json({ error: 'Failed to create insurance/benefit' });
+    }
+};
+
+// Update insurance/benefit
+export const updateInsurance = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { benefitType, itemName, quantity, unit, value, description, distributionDate, distributionLocation, notes, status } = req.body;
+        
+        const benefit = await Benefit.findById(id);
+        if (!benefit) {
+            return res.status(404).json({ error: 'Insurance/benefit not found' });
+        }
+
+        const updates = {
+            benefitType,
+            itemName,
+            quantity: parseFloat(quantity),
+            unit,
+            value: value ? parseFloat(value) : null,
+            description,
+            distributionDate: distributionDate ? new Date(distributionDate) : null,
+            distributionLocation,
+            notes,
+            status
+        };
+
+        await Benefit.update(id, updates);
+        res.json({ success: true, message: 'Insurance/benefit updated successfully', benefit });
+    } catch (error) {
+        console.error('Error updating insurance/benefit:', error);
+        res.status(500).json({ error: 'Failed to update insurance/benefit' });
+    }
+};
+
+// Delete insurance/benefit
+export const deleteInsurance = async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        const benefit = await Benefit.findById(id);
+        if (!benefit) {
+            return res.status(404).json({ error: 'Insurance/benefit not found' });
+        }
+
+        await benefit.delete();
+        res.json({ success: true, message: 'Insurance/benefit deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting insurance/benefit:', error);
+        res.status(500).json({ error: 'Failed to delete insurance/benefit' });
+    }
+};
+
 // Get real-time notifications for staff
 export const getStaffNotifications = async (req, res) => {
     try {
@@ -336,65 +430,6 @@ export const clearStaffNotifications = async (req, res) => {
         res.status(500).json({ error: 'Failed to clear notifications' });
     }
 };
-
-// Create Insurance
-export const createInsurance = async (req, res) => {
-    try {
-        const { farmerId, farmerName, barangay, cropType, insuredArea, plantingDate, expectedHarvestDate, insuranceType } = req.body;
-        const insurance = new Insurance({
-            farmerId, farmerName, barangay, cropType, insuredArea: parseFloat(insuredArea), plantingDate: new Date(plantingDate), expectedHarvestDate: new Date(expectedHarvestDate), insuranceType, premiumAmount: 0, coverageAmount: 0, status: 'pending'
-        });
-        // TODO: Calculate premium and coverage
-        await insurance.save();
-        res.json({ success: true, message: 'Insurance created successfully', insurance });
-    } catch (error) {
-        console.error('Error creating insurance:', error);
-        res.status(500).json({ error: 'Failed to create insurance' });
-    }
-};
-
-// Update Insurance
-export const updateInsurance = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { cropType, insuredArea, plantingDate, expectedHarvestDate, insuranceType, status } = req.body;
-        const insurance = await Insurance.findById(id);
-        if (!insurance) return res.status(404).json({ error: 'Insurance not found' });
-        insurance.cropType = cropType; insurance.insuredArea = parseFloat(insuredArea); insurance.plantingDate = new Date(plantingDate); insurance.expectedHarvestDate = new Date(expectedHarvestDate); insurance.insuranceType = insuranceType; insurance.status = status;
-        // TODO: Recalculate premium and coverage if insuredArea or insuranceType changes
-        await insurance.save();
-        res.json({ success: true, message: 'Insurance updated successfully', insurance });
-    } catch (error) {
-        console.error('Error updating insurance:', error);
-        res.status(500).json({ error: 'Failed to update insurance' });
-    }
-};
-
-// Delete Insurance
-export const deleteInsurance = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const insurance = await Insurance.findById(id);
-        if (!insurance) return res.status(404).json({ error: 'Insurance not found' });
-        await insurance.delete();
-        res.json({ success: true, message: 'Insurance deleted successfully' });
-    } catch (error) {
-        console.error('Error deleting insurance:', error);
-        res.status(500).json({ error: 'Failed to delete insurance' });
-    }
-};
-
-// Get insurance applications (staff can view but not modify status)
-export const getInsurance = async (req, res) => {
-    try {
-        const insurance = await Insurance.findAll();
-        res.json({ insurance });
-    } catch (error) {
-        console.error('Error getting insurance applications:', error);
-        res.status(500).json({ error: 'Failed to load insurance applications' });
-    }
-};
-
 
 // Get all request letters (Staff view)
 export const getAllRequests = async (req, res) => {

@@ -7,8 +7,8 @@ import { User } from "../models/UserMySQL.js";
 import { Inventory } from "../models/InventoryMySQL.js";
 import { Claim } from "../models/ClaimMySQL.js";
 import { DamageReport } from "../models/DamageReportMySQL.js";
-import { Insurance } from "../models/InsuranceMySQL.js";
 import { Announcement } from "../models/AnnouncementMySQL.js";
+import { Benefit } from "../models/BenefitMySQL.js";
 
 // Get all farmers
 export const getAllFarmers = async (req, res) => {
@@ -152,6 +152,42 @@ export const getAllClaims = async (req, res) => {
     }
 };
 
+// Get all insurance/benefits
+export const getAllInsurance = async (req, res) => {
+    try {
+        const benefits = await Benefit.findAll();
+        res.json({ benefits });
+    } catch (error) {
+        console.error('Error getting insurance/benefits:', error);
+        res.status(500).json({ error: 'Failed to load insurance data' });
+    }
+};
+
+// Update insurance/benefit status
+export const updateInsuranceStatus = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status, notes } = req.body;
+        
+        const benefit = await Benefit.findById(id);
+        if (!benefit) {
+            return res.status(404).json({ error: 'Insurance/benefit record not found' });
+        }
+
+        await Benefit.updateStatus(id, status);
+        
+        // If there are additional notes, update them too
+        if (notes) {
+            await Benefit.update(id, { notes });
+        }
+        
+        res.json({ success: true, message: 'Insurance/benefit status updated successfully', benefit });
+    } catch (error) {
+        console.error('Error updating insurance/benefit status:', error);
+        res.status(500).json({ error: 'Failed to update insurance/benefit status' });
+    }
+};
+
 // Update claim status
 export const updateClaimStatus = async (req, res) => {
     try {
@@ -201,41 +237,6 @@ export const updateDamageReportStatus = async (req, res) => {
     }
 };
 
-// Get all insurance applications
-export const getAllInsurance = async (req, res) => {
-    try {
-        const insurance = await Insurance.findAll();
-        res.json({ insurance });
-    } catch (error) {
-        console.error('Error getting insurance applications:', error);
-        res.status(500).json({ error: 'Failed to load insurance applications' });
-    }
-};
-
-// Update insurance status
-export const updateInsuranceStatus = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { status, approvalNotes } = req.body;
-        
-        const insurance = await Insurance.findById(id);
-        if (!insurance) {
-            return res.status(404).json({ error: 'Insurance application not found' });
-        }
-
-        let policyNumber = '';
-        if (status === 'approved') {
-            policyNumber = insurance.generatePolicyNumber();
-        }
-
-        await insurance.updateStatus(status, req.session.userId, approvalNotes, policyNumber);
-        res.json({ success: true, message: 'Insurance status updated successfully', insurance });
-    } catch (error) {
-        console.error('Error updating insurance status:', error);
-        res.status(500).json({ error: 'Failed to update insurance status' });
-    }
-};
-
 // Get all announcements
 export const getAllAnnouncements = async (req, res) => {
     try {
@@ -250,12 +251,11 @@ export const getAllAnnouncements = async (req, res) => {
 // Get dashboard statistics
 export const getDashboardStats = async (req, res) => {
     try {
-        const [userStats, inventoryStats, claimStats, damageStats, insuranceStats, announcementStats] = await Promise.all([
+        const [userStats, inventoryStats, claimStats, damageStats, announcementStats] = await Promise.all([
             User.getStats(),
             Inventory.getStats(),
             Claim.getStats(),
             DamageReport.getStats(),
-            Insurance.getStats(),
             Announcement.getStats()
         ]);
 
@@ -264,7 +264,6 @@ export const getDashboardStats = async (req, res) => {
             inventory: inventoryStats,
             claims: claimStats,
             damage: damageStats,
-            insurance: insuranceStats,
             announcements: announcementStats
         });
     } catch (error) {

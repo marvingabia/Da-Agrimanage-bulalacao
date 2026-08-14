@@ -8,7 +8,6 @@ const mysqlModels = await Promise.all([
     import("../models/UserMySQL.js"),
     import("../models/ClaimMySQL.js"),
     import("../models/DamageReportMySQL.js"),
-    import("../models/InsuranceMySQL.js"),
     import("../models/AnnouncementMySQL.js"),
     import("../models/RequestLetterMySQL.js")
 ]);
@@ -16,9 +15,8 @@ const mysqlModels = await Promise.all([
 const User = mysqlModels[0].User || mysqlModels[0].default;
 const Claim = mysqlModels[1].Claim || mysqlModels[1].default;
 const DamageReport = mysqlModels[2].DamageReport || mysqlModels[2].default;
-const Insurance = mysqlModels[3].Insurance || mysqlModels[3].default;
-const Announcement = mysqlModels[4].Announcement || mysqlModels[4].default;
-const RequestLetter = mysqlModels[5].RequestLetter || mysqlModels[5].default;
+const Announcement = mysqlModels[3].Announcement || mysqlModels[3].default;
+const RequestLetter = mysqlModels[4].RequestLetter || mysqlModels[4].default;
 
 console.log('✅ Using MySQL models for farmer operations');
 
@@ -36,10 +34,9 @@ export const getFarmerData = async (req, res) => {
             return res.status(403).json({ error: 'Access denied' });
         }
 
-        const [claims, damageReports, insurance, announcements] = await Promise.all([
+        const [claims, damageReports, announcements] = await Promise.all([
             Claim.findByFarmer(farmerId),
             DamageReport.findByFarmer(farmerId),
-            Insurance.findByFarmer(farmerId),
             Announcement.findByBarangay(farmer.barangay)
         ]);
 
@@ -47,7 +44,6 @@ export const getFarmerData = async (req, res) => {
             farmer,
             claims,
             damageReports,
-            insurance,
             announcements
         });
     } catch (error) {
@@ -227,113 +223,6 @@ export const submitDamageReport = async (req, res) => {
     }
 };
 
-// Apply for crop insurance
-export const applyInsurance = async (req, res) => {
-    try {
-        const { 
-            cropType, 
-            insuredArea, 
-            plantingDate, 
-            expectedHarvestDate, 
-            insuranceType,
-            cropVariety,
-            totalFarmArea,
-            farmLocation,
-            previousYield,
-            farmingExperience,
-            additionalInfo,
-            contactNumber,
-            emergencyContact,
-            estimatedPremium,
-            estimatedCoverage
-        } = req.body;
-        
-        const farmerId = req.session.userId;
-        const farmerName = req.session.userName;
-        const farmerBarangay = req.session.userBarangay;
-        
-        if (!farmerId || !farmerName || !farmerBarangay) {
-            return res.status(403).json({ error: 'Access denied - missing farmer information' });
-        }
-
-        // Verify farmer exists
-        try {
-            const { User } = await import('../models/UserMySQL.js');
-            const farmer = await User.findById(farmerId);
-            if (!farmer) {
-                return res.status(404).json({ error: 'Farmer account not found. Please re-login.' });
-            }
-        } catch (dbError) {
-            console.error('❌ Error verifying farmer:', dbError.message);
-            return res.status(500).json({ error: 'Database error. Please try again.' });
-        }
-
-        // Use user-provided premium and coverage amounts
-        const premiumAmount = parseFloat(estimatedPremium) || 0;
-        const coverageAmount = parseFloat(estimatedCoverage) || 0;
-
-        const insuranceData = {
-            id: 'INS-' + Date.now(),
-            farmerId,
-            farmerName,
-            barangay: farmerBarangay,
-            cropType,
-            cropVariety,
-            insuredArea: parseFloat(insuredArea),
-            totalFarmArea: parseFloat(totalFarmArea) || 0,
-            plantingDate: new Date(plantingDate),
-            expectedHarvestDate: new Date(expectedHarvestDate),
-            insuranceType,
-            farmLocation,
-            previousYield: parseInt(previousYield) || 0,
-            farmingExperience: parseInt(farmingExperience) || 0,
-            premiumAmount,
-            coverageAmount,
-            additionalInfo,
-            contactNumber,
-            emergencyContact,
-            status: 'pending',
-            createdAt: new Date().toISOString()
-        };
-
-        const insurance = new Insurance(insuranceData);
-        await insurance.save();
-        console.log('✅ Insurance saved to MySQL:', insuranceData.id);
-
-        console.log('✅ Insurance application saved:', {
-            id: insuranceData.id,
-            farmerId,
-            farmerName,
-            barangay: farmerBarangay,
-            cropType,
-            insuredArea
-        });
-        
-        // Store notification for staff dashboard
-        if (!global.staffNotifications) global.staffNotifications = [];
-        global.staffNotifications.push({
-            type: 'new_insurance',
-            insuranceId: insuranceData.id,
-            farmerName,
-            barangay: farmerBarangay,
-            cropType,
-            insuredArea,
-            timestamp: new Date().toISOString()
-        });
-        
-        res.json({ 
-            success: true, 
-            message: 'Insurance application submitted successfully', 
-            insurance: insuranceData,
-            farmerName,
-            barangay: farmerBarangay
-        });
-    } catch (error) {
-        console.error('Error applying for insurance:', error);
-        res.status(500).json({ error: 'Failed to apply for insurance' });
-    }
-};
-
 export const getFarmerClaims = async (req, res) => {
     try {
         const farmerId = req.session.userId;
@@ -353,17 +242,6 @@ export const getFarmerDamageReports = async (req, res) => {
     } catch (error) {
         console.error('Error getting damage reports:', error);
         res.status(500).json({ error: 'Failed to load damage reports' });
-    }
-};
-
-export const getFarmerInsurance = async (req, res) => {
-    try {
-        const farmerId = req.session.userId;
-        const insurance = await Insurance.findByFarmer(farmerId);
-        return res.json({ insurance });
-    } catch (error) {
-        console.error('Error getting insurance applications:', error);
-        res.status(500).json({ error: 'Failed to load insurance applications' });
     }
 };
 

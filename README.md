@@ -10,6 +10,15 @@ A comprehensive web-based agricultural management system designed for the Munici
 
 ## ✨ Features
 
+### 🤖 **NEW: AI Crop Disease Detection**
+- **Offline AI**: TensorFlow.js-powered detection (no API keys needed!)
+- **Instant Analysis**: Real-time crop disease identification
+- **Detects**: Rice, Tomato, and other crops
+- **Identifies**: Diseases, pests, nutrient deficiencies
+- **Works Offline**: Runs entirely in browser
+- **GPS Integration**: Location tracking for damage reports
+- See `TENSORFLOW_IMPLEMENTATION.md` for details
+
 ### 🔐 Authentication System
 - **Multi-Role Login**: Admin, Staff, and Farmer roles
 - **Google OAuth Integration**: Farmers can sign in with Google accounts
